@@ -160,7 +160,7 @@ npm run build:dir
 
 启动时点击加载窗口的「查看详细日志」按钮，或查看 `backend/data/log.log` 文件。
 
-## 相关链接
+## 友情链接
 
 - [KiraAI 主项目](https://github.com/xxynet/KiraAI)
 - [KiraAI 文档](https://docs.kira-ai.top)
@@ -168,7 +168,7 @@ npm run build:dir
 
 ## 许可证
 
-MIT License
+AGPL3.0 License
 
 ---
 
