@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![KiraAI](https://img.shields.io/badge/KiraAI-2.9.1-00d4ff?style=for-the-badge) ![Electron](https://img.shields.io/badge/Electron-28.0-47848f?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge)
+![KiraAI](https://img.shields.io/badge/KiraAI-00d4ff?style=for-the-badge) ![Electron](https://img.shields.io/badge/Electron-28.0-47848f?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge)
 
 **KiraAI 桌面客户端 - 一键安装，开箱即用**
 
@@ -22,7 +22,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 - **自动环境配置** - 首次运行自动创建 Python 虚拟环境并安装依赖
 - **加载动画** - 优雅的启动加载界面，实时显示后端日志
 - **系统集成** - 桌面快捷方式、开始菜单快捷方式
-- **完整功能** - 包含 KiraAI 2.9.1 所有功能
+- **完整功能** - 包含 KiraAI的所有功能
 
 ## 系统要求
 
@@ -31,16 +31,12 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ## 安装使用
 
-### 方式一：安装包（推荐）
+### 安装包（推荐）
 
 1. 运行 `KiraAI Setup 2.9.1.exe`
 2. 选择安装路径（建议不要安装在 `Program Files` 目录）
 3. 完成安装后，双击桌面快捷方式启动
 
-### 方式二：便携版
-
-1. 解压 `win-unpacked` 文件夹
-2. 双击 `KiraAI.exe` 启动
 
 ## 首次运行
 
@@ -106,7 +102,9 @@ npm run build:dir
 
 ### 后端配置
 
-配置文件位于 `backend/data/config/` 目录：
+配置文件位于： 默认安装的位置：C:\Users\你的用户名\AppData\Local\Programs\KiraAI\resources\backend\data 
+              program files安装的位置：C:\Program Files\KiraAI\resources\backend\data
+目录：
 
 | 文件 | 说明 |
 |------|------|
