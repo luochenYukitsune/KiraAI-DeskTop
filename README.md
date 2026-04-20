@@ -102,8 +102,8 @@ npm run build:dir
 
 ### 后端配置
 
-配置文件位于： 默认安装的位置：C:\Users\你的用户名\AppData\Local\Programs\KiraAI\resources\backend\data 
-              program files安装的位置：C:\Program Files\KiraAI\resources\backend\data
+配置文件位于 -默认安装的位置：C:\Users\你的用户名\AppData\Local\Programs\KiraAI\resources\backend\data 
+            - program files安装的位置：C:\Program Files\KiraAI\resources\backend\data
 目录：
 
 | 文件 | 说明 |
