@@ -1,6 +1,6 @@
 {
   "name": "KiraAI-Desktop",
-  "version": "2.9.1",
+  "version": "2.10.0",
   "description": "KiraAI Desktop Application",
   "main": "main.js",
   "author": "KiraAI Team",
@@ -15,7 +15,7 @@
     "appId": "com.kiraai.desktop",
     "productName": "KiraAI",
     "directories": {
-      "output": "C:\\Users\\Administrator\\Desktop\\PyQt-Fluent-Widgets-master\\KiraAI-Dist"
+      "output": "C:\\Users\\Administrator\\Desktop\\PyQt-Fluent-Widgets-master\\KiraAI-Release\\2.10.0"
     },
     "files": [
       "main.js",
@@ -52,7 +52,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "KiraAI"
+      "shortcutName": "KiraAI",
+      "include": "build/installer.nsh"
     }
   },
   "devDependencies": {
