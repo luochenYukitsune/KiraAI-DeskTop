@@ -109,30 +109,36 @@ function checkBackendHealth(interval = 1000, maxAttempts = 120) {
 function startBackend() {
     return new Promise((resolve, reject) => {
         const backendDir = getBackendDir();
-        const runBatPath = getRunBatPath();
-        
-        if (!fs.existsSync(runBatPath)) {
-            const error = new Error(`后端目录未找到，请确保 backend 文件夹存在\n\n预期路径: ${runBatPath}`);
+
+        if (!fs.existsSync(backendDir)) {
+            const error = new Error(`后端目录未找到，请确保 backend 文件夹存在\n\n预期路径: ${backendDir}`);
             sendToLoadingWindow('backend-error', { message: error.message });
             reject(error);
             return;
         }
-        
+
         sendToLoadingWindow('backend-status', { status: '正在启动后端服务...' });
-        sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runBatPath}`, type: 'info' });
         sendToLoadingWindow('backend-log', { line: `Working directory: ${backendDir}`, type: 'info' });
-        
-        console.log(`Starting backend with: ${runBatPath}`);
+
         console.log(`Working directory: ${backendDir}`);
-        
+
         if (process.platform === 'win32') {
             try {
                 execSync('taskkill /F /IM python.exe /FI "WINDOWTITLE eq KiraAI*"', { stdio: 'pipe' });
             } catch (e) {
             }
         }
-        
+
         if (process.platform === 'win32') {
+            const runBatPath = getRunBatPath();
+            if (!fs.existsSync(runBatPath)) {
+                const error = new Error(`后端启动脚本未找到\n\n预期路径: ${runBatPath}`);
+                sendToLoadingWindow('backend-error', { message: error.message });
+                reject(error);
+                return;
+            }
+            sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runBatPath}`, type: 'info' });
+            console.log(`Starting backend with: ${runBatPath}`);
             backendProcess = spawn('cmd.exe', ['/c', runBatPath], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -148,6 +154,8 @@ function startBackend() {
                 reject(error);
                 return;
             }
+            sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runShPath}`, type: 'info' });
+            console.log(`Starting backend with: ${runShPath}`);
             backendProcess = spawn('/bin/bash', [runShPath], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
