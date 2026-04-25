@@ -216,8 +216,8 @@
     </div>
     
     <script>
-        const { ipcRenderer } = require('electron');
-        
+        const api = window.electronAPI;
+
         const statusEl = document.getElementById('status');
         const progressEl = document.getElementById('progress');
         const logBtn = document.getElementById('logBtn');
@@ -259,26 +259,26 @@
             logBtn.textContent = '查看详细日志';
         });
         
-        ipcRenderer.on('backend-status', (event, data) => {
-            if (data.status) {
+        api.onBackendStatus((data) => {
+            if (data.status !== undefined) {
                 statusEl.textContent = data.status;
             }
-            if (data.progress) {
+            if (data.progress !== undefined) {
                 progressEl.textContent = data.progress;
             }
         });
-        
-        ipcRenderer.on('backend-log', (event, data) => {
+
+        api.onBackendLog((data) => {
             addLog(data.line, data.type || 'info');
         });
-        
-        ipcRenderer.on('backend-ready', () => {
+
+        api.onBackendReady(() => {
             statusEl.textContent = '就绪';
             progressEl.textContent = '';
             addLog('Backend is ready!', 'success');
         });
-        
-        ipcRenderer.on('backend-error', (event, data) => {
+
+        api.onBackendError((data) => {
             statusEl.textContent = '失败';
             progressEl.textContent = data.message;
             addLog(data.message, 'error');

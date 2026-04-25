@@ -33,7 +33,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ### 安装包（推荐）
 
-1. 运行 `KiraAI Setup 2.9.1.exe`
+1. 运行 `KiraAI Setup 2.10.0.exe`
 2. 选择安装路径（建议不要安装在 `Program Files` 目录）
 3. 完成安装后，双击桌面快捷方式启动
 
@@ -49,8 +49,8 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ## 项目结构
 
-```
-KiraAI-Electron/
+```text
+KiraAI-Desktop/
 ├── main.js              # Electron 主进程
 ├── preload.js           # 预加载脚本
 ├── loading.html         # 加载动画窗口
