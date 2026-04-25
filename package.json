@@ -15,7 +15,7 @@
     "appId": "com.kiraai.desktop",
     "productName": "KiraAI",
     "directories": {
-      "output": "C:\\Users\\Administrator\\Desktop\\PyQt-Fluent-Widgets-master\\KiraAI-Release\\2.10.0"
+      "output": "KiraAI-Dist"
     },
     "files": [
       "main.js",
@@ -30,12 +30,22 @@
         "filter": [
           "**/*",
           "!**/venv/**",
+          "!**/.venv/**",
           "!**/__pycache__/**",
           "!**/*.pyc",
           "!**/build/**",
           "!**/dist/**",
           "!**/.git/**",
-          "!**/node_modules/**"
+          "!**/node_modules/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/data/**",
+          "!**/*.log",
+          "!**/main.spec",
+          "!**/.vscode/**",
+          "!**/.idea/**",
+          "!**/.DS_Store",
+          "!**/Thumbs.db"
         ]
       }
     ],

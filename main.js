@@ -52,34 +52,56 @@ function sendToLoadingWindow(channel, data) {
     }
 }
 
-function checkBackendHealth(interval = 1000) {
+function checkBackendHealth(interval = 1000, maxAttempts = 120) {
     return new Promise((resolve, reject) => {
         let attempts = 0;
-        
+        let settled = false;
+
+        function scheduleNext() {
+            if (settled) return;
+            settled = true;
+            setTimeout(() => {
+                settled = false;
+                check();
+            }, interval);
+        }
+
         function check() {
+            if (isQuitting) {
+                reject(new Error('Aborted'));
+                return;
+            }
+            if (!backendProcess) {
+                reject(new Error('Backend process exited before becoming healthy'));
+                return;
+            }
             attempts++;
+            if (attempts > maxAttempts) {
+                reject(new Error(`Backend health check timed out after ${maxAttempts} attempts`));
+                return;
+            }
             sendToLoadingWindow('backend-status', {
                 progress: `正在检测后端服务... (${attempts}次)`
             });
-            
+
             const req = http.get(`${BACKEND_URL}/api/health`, (res) => {
                 if (res.statusCode === 200) {
                     resolve(true);
                 } else {
-                    setTimeout(check, interval);
+                    scheduleNext();
                 }
             });
-            
+
             req.on('error', () => {
-                setTimeout(check, interval);
+                scheduleNext();
             });
-            
+
             req.setTimeout(2000, () => {
                 req.destroy();
-                setTimeout(check, interval);
+                scheduleNext();
             });
         }
-        
+
         check();
     });
 }
@@ -87,30 +109,36 @@ function checkBackendHealth(interval = 1000) {
 function startBackend() {
     return new Promise((resolve, reject) => {
         const backendDir = getBackendDir();
-        const runBatPath = getRunBatPath();
-        
-        if (!fs.existsSync(runBatPath)) {
-            const error = new Error(`后端目录未找到，请确保 backend 文件夹存在\n\n预期路径: ${runBatPath}`);
+
+        if (!fs.existsSync(backendDir)) {
+            const error = new Error(`后端目录未找到，请确保 backend 文件夹存在\n\n预期路径: ${backendDir}`);
             sendToLoadingWindow('backend-error', { message: error.message });
             reject(error);
             return;
         }
-        
+
         sendToLoadingWindow('backend-status', { status: '正在启动后端服务...' });
-        sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runBatPath}`, type: 'info' });
         sendToLoadingWindow('backend-log', { line: `Working directory: ${backendDir}`, type: 'info' });
-        
-        console.log(`Starting backend with: ${runBatPath}`);
+
         console.log(`Working directory: ${backendDir}`);
-        
+
         if (process.platform === 'win32') {
             try {
                 execSync('taskkill /F /IM python.exe /FI "WINDOWTITLE eq KiraAI*"', { stdio: 'pipe' });
             } catch (e) {
             }
         }
-        
+
         if (process.platform === 'win32') {
+            const runBatPath = getRunBatPath();
+            if (!fs.existsSync(runBatPath)) {
+                const error = new Error(`后端启动脚本未找到\n\n预期路径: ${runBatPath}`);
+                sendToLoadingWindow('backend-error', { message: error.message });
+                reject(error);
+                return;
+            }
+            sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runBatPath}`, type: 'info' });
+            console.log(`Starting backend with: ${runBatPath}`);
             backendProcess = spawn('cmd.exe', ['/c', runBatPath], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -120,6 +148,14 @@ function startBackend() {
             });
         } else {
             const runShPath = path.join(backendDir, 'scripts', 'run.sh');
+            if (!fs.existsSync(runShPath)) {
+                const error = new Error(`后端启动脚本未找到\n\n预期路径: ${runShPath}`);
+                sendToLoadingWindow('backend-error', { message: error.message });
+                reject(error);
+                return;
+            }
+            sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runShPath}`, type: 'info' });
+            console.log(`Starting backend with: ${runShPath}`);
             backendProcess = spawn('/bin/bash', [runShPath], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -168,8 +204,7 @@ function startBackend() {
 function stopBackend() {
     if (backendProcess && backendProcess.pid) {
         console.log('Stopping backend...');
-        isQuitting = true;
-        
+
         if (process.platform === 'win32') {
             try {
                 execSync('taskkill /F /T /PID ' + backendProcess.pid, { stdio: 'pipe' });
@@ -196,11 +231,11 @@ function createLoadingWindow() {
         minHeight: 150,
         resizable: true,
         frame: false,
-        transparent: true,
         alwaysOnTop: false,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
         },
         backgroundColor: '#1a1a1a'
     });
@@ -266,10 +301,10 @@ function createWindow() {
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
             event.preventDefault();
+            isQuitting = true;
             mainWindow.hide();
             stopBackend();
             setTimeout(() => {
-                isQuitting = true;
                 app.quit();
             }, 2000);
         }
@@ -302,6 +337,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
+        isQuitting = true;
         stopBackend();
         app.quit();
     }
@@ -314,10 +350,12 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+    isQuitting = true;
     stopBackend();
 });
 
 app.on('will-quit', () => {
+    isQuitting = true;
     stopBackend();
 });
 
@@ -325,6 +363,7 @@ ipcMain.handle('get-backend-url', () => BACKEND_URL);
 
 ipcMain.handle('restart-backend', async () => {
     stopBackend();
+    isQuitting = false;
     try {
         await startBackend();
         return { success: true };
