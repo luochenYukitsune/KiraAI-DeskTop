@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KiraAI - Loading</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .logo {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ffffff;
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        
+        .bottom-area {
+            position: fixed;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .loading-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        
+        .dots-container {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #ffffff;
+            opacity: 0.4;
+            animation: dotWave 4.2s steps(2, end) infinite;
+        }
+        
+        .dot:nth-child(1) { animation-delay: 0s; }
+        .dot:nth-child(2) { animation-delay: 0.7s; }
+        .dot:nth-child(3) { animation-delay: 1.4s; }
+        .dot:nth-child(4) { animation-delay: 2.1s; }
+        .dot:nth-child(5) { animation-delay: 2.8s; }
+        .dot:nth-child(6) { animation-delay: 3.5s; }
+        
+        @keyframes dotWave {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            10% { opacity: 1; transform: scale(1.2); }
+            30% { opacity: 0.4; transform: scale(1); }
+        }
+        
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 11px;
+            color: #888;
+        }
+        
+        .status {
+            color: #888;
+        }
+        
+        .progress-text {
+            color: #64ffda;
+        }
+        
+        .log-btn {
+            background: transparent;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 11px;
+            text-decoration: underline;
+            transition: color 0.2s;
+        }
+        
+        .log-btn:hover {
+            color: #64ffda;
+        }
+        
+        .log-panel {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: rgba(26, 26, 26, 0.98);
+            border-top: 1px solid #333;
+            flex-direction: column;
+        }
+        
+        .log-panel.show {
+            display: flex;
+        }
+        
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 15px;
+            background: #111;
+            border-bottom: 1px solid #333;
+        }
+        
+        .log-header span {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        .log-close {
+            background: transparent;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        
+        .log-close:hover {
+            color: #ffffff;
+        }
+        
+        .log-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        
+        .log-line {
+            margin-bottom: 2px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .log-line.info { color: #ccc; }
+        .log-line.error { color: #ff6b6b; }
+        .log-line.warn { color: #ffd93d; }
+        .log-line.success { color: #64ffda; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">KiraAI</div>
+        <div class="subtitle">AI Assistant Desktop</div>
+        <div class="status-row">
+            <span class="status" id="status">启动中</span>
+            <span class="progress-text" id="progress"></span>
+        </div>
+    </div>
+    
+    <div class="bottom-area">
+        <div class="loading-row">
+            <div class="dots-container">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+            <button class="log-btn" id="logBtn">查看详细日志</button>
+        </div>
+    </div>
+    
+    <div class="log-panel" id="logPanel">
+        <div class="log-header">
+            <span>后端启动日志</span>
+            <button class="log-close" id="logClose">&times;</button>
+        </div>
+        <div class="log-content" id="logContent"></div>
+    </div>
+    
+    <script>
+        const api = window.electronAPI;
+
+        const statusEl = document.getElementById('status');
+        const progressEl = document.getElementById('progress');
+        const logBtn = document.getElementById('logBtn');
+        const logPanel = document.getElementById('logPanel');
+        const logClose = document.getElementById('logClose');
+        const logContent = document.getElementById('logContent');
+        
+        let logLines = [];
+        const MAX_LOG_LINES = 500;
+        
+        function addLog(line, type = 'info') {
+            logLines.push({ text: line, type: type });
+            if (logLines.length > MAX_LOG_LINES) {
+                logLines.shift();
+            }
+            renderLogs();
+        }
+        
+        function renderLogs() {
+            logContent.innerHTML = logLines.map(log => 
+                `<div class="log-line ${log.type}">${escapeHtml(log.text)}</div>`
+            ).join('');
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        logBtn.addEventListener('click', () => {
+            logPanel.classList.toggle('show');
+            logBtn.textContent = logPanel.classList.contains('show') ? '隐藏日志' : '查看详细日志';
+        });
+        
+        logClose.addEventListener('click', () => {
+            logPanel.classList.remove('show');
+            logBtn.textContent = '查看详细日志';
+        });
+        
+        api.onBackendStatus((data) => {
+            if (data.status !== undefined) {
+                statusEl.textContent = data.status;
+            }
+            if (data.progress !== undefined) {
+                progressEl.textContent = data.progress;
+            }
+        });
+
+        api.onBackendLog((data) => {
+            addLog(data.line, data.type || 'info');
+        });
+
+        api.onBackendReady(() => {
+            statusEl.textContent = '就绪';
+            progressEl.textContent = '';
+            addLog('Backend is ready!', 'success');
+        });
+
+        api.onBackendError((data) => {
+            statusEl.textContent = '失败';
+            progressEl.textContent = data.message;
+            addLog(data.message, 'error');
+        });
+    </script>
+</body>
+</html>
