@@ -18,7 +18,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ## 功能特性
 
-- **一键安装** - NSIS 安装向导，自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`
+- **一键安装** - NSIS 安装向导，自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`(请一定一定一定不要安装在programfiles文件夹里，无法使用后果自负)
 - **自动环境配置** - 首次运行自动创建 Python 虚拟环境并安装依赖（清华镜像加速）
 - **离线可用** - Vue.js SPA 前端预编译打包，无需联网下载
 - **加载动画** - 优雅的启动加载界面，实时显示后端日志
