@@ -2,7 +2,9 @@
 KiraAI WebUI Application
 Provides a web-based admin panel for managing KiraAI system
 """
+import mimetypes
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from core.lifecycle import KiraLifecycle
-from core.utils.path_utils import get_data_path
+from core.utils.path_utils import get_data_path, get_webui_dist_path
 from webui.utils import _get_or_generate_access_token
 from webui.routes.auth import AuthRoutes
 from webui.routes.overview import OverviewRoutes
@@ -33,7 +35,14 @@ class KiraWebUI:
     Holds lifecycle instance for accessing system components
     """
 
-    def __init__(self, lifecycle: KiraLifecycle):
+    def __init__(self, lifecycle: KiraLifecycle, dist_dir: Optional[Path] = None):
+        # Ensure proper MIME types on Windows (fixes .js served as text/plain)
+        mimetypes.add_type("application/javascript", ".js")
+        mimetypes.add_type("text/javascript", ".js")
+        mimetypes.add_type("text/css", ".css")
+        mimetypes.add_type("application/json", ".json")
+        mimetypes.add_type("image/svg+xml", ".svg")
+
         self.lifecycle = lifecycle
         self.access_token = _get_or_generate_access_token()
         self.app = FastAPI(
@@ -46,8 +55,7 @@ class KiraWebUI:
 
         # Paths
         self.webui_dir = Path(__file__).parent
-        self.static_dir = self.webui_dir / "static"
-        self.templates_dir = self.webui_dir / "templates"
+        self.dist_dir = dist_dir or get_webui_dist_path()
         self.sticker_dir = get_data_path() / "sticker"
 
         # Setup CORS
@@ -59,14 +67,23 @@ class KiraWebUI:
             allow_headers=["*"],
         )
 
-        # Mount static files
-        if self.static_dir.exists():
-            self.app.mount(
-                "/static", StaticFiles(directory=str(self.static_dir)), name="static"
-            )
+        # Mount user sticker library
         if self.sticker_dir.exists():
             self.app.mount(
                 "/sticker", StaticFiles(directory=str(self.sticker_dir)), name="sticker"
+            )
+
+        # Mount Vue SPA build output. /assets holds content-hashed JS/CSS chunks,
+        # /monacoeditorwork holds Monaco Editor web-worker bundles.
+        dist_assets = self.dist_dir / "assets"
+        dist_monaco = self.dist_dir / "monacoeditorwork"
+        if dist_assets.exists():
+            self.app.mount(
+                "/assets", StaticFiles(directory=str(dist_assets)), name="dist_assets"
+            )
+        if dist_monaco.exists():
+            self.app.mount(
+                "/monacoeditorwork", StaticFiles(directory=str(dist_monaco)), name="dist_monaco"
             )
 
         # Register routes
@@ -77,7 +94,8 @@ class KiraWebUI:
         self.lifecycle.webui_app = self.app
 
     def _register_routes(self):
-        AuthRoutes(self.app, self.lifecycle, self.access_token, self.templates_dir).register()
+        auth_routes = AuthRoutes(self.app, self.lifecycle, self.access_token, self.dist_dir)
+        auth_routes.register()
         OverviewRoutes(self.app, self.lifecycle).register()
         LogsRoutes(self.app, self.lifecycle).register()
         PersonasRoutes(self.app, self.lifecycle).register()
@@ -90,6 +108,9 @@ class KiraWebUI:
         StickersRoutes(self.app, self.lifecycle).register()
         SkillsRoutes(self.app, self.lifecycle).register()
         SettingsRoutes(self.app, self.lifecycle).register()
+
+        # SPA catch-all must be registered last
+        auth_routes.register_spa_fallback()
 
     async def run(self, host: str, port: int):
         config = uvicorn.Config(
@@ -107,11 +128,9 @@ class KiraWebUI:
         return self.app
 
 
-if __name__ == '__main__':
-    webui = KiraWebUI()
-    app = webui.get_app()
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=5267,
-    )
+# Note: this module is intentionally not a standalone entrypoint.
+# `main.py` is the canonical launcher — it runs `KiraLauncher.start()` which
+# awaits `KiraLifecycle.init_and_run_system()` before serving. Instantiating
+# `KiraLifecycle` directly here and passing it to `uvicorn.run()` leaves
+# `db_manager`, `provider_manager`, `plugin_manager`, etc. as `None` and
+# most API routes will return 500.

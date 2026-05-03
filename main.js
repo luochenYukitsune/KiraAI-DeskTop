@@ -28,6 +28,10 @@ function getRunBatPath() {
 }
 
 function getBackendDataDir() {
+    if (app.isPackaged) {
+        const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local');
+        return path.join(localAppData, 'kiraAI-DeskTop');
+    }
     return path.join(getBackendDir(), 'data');
 }
 
@@ -139,12 +143,13 @@ function startBackend() {
             }
             sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runBatPath}`, type: 'info' });
             console.log(`Starting backend with: ${runBatPath}`);
-            backendProcess = spawn('cmd.exe', ['/c', runBatPath], {
+            backendProcess = spawn(runBatPath, [], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
                 detached: false,
                 windowsHide: true,
-                env: process.env
+                env: process.env,
+                shell: true
             });
         } else {
             const runShPath = path.join(backendDir, 'scripts', 'run.sh');
@@ -256,7 +261,7 @@ function createWindow() {
         minWidth: 1000,
         minHeight: 700,
         title: 'KiraAI',
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: path.join(__dirname, 'assets', 'KD-LOGO.ico'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,

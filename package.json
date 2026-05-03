@@ -1,6 +1,6 @@
 {
-  "name": "KiraAI-Desktop",
-  "version": "2.10.0",
+  "name": "kiraAI-DeskTop",
+  "version": "2.12.0",
   "description": "KiraAI Desktop Application",
   "main": "main.js",
   "author": "KiraAI Team",
@@ -13,10 +13,11 @@
   },
   "build": {
     "appId": "com.kiraai.desktop",
-    "productName": "KiraAI",
+    "productName": "kiraAI-DeskTop",
     "directories": {
-      "output": "KiraAI-Dist"
+      "output": "../KiraAI-Dist"
     },
+    "asar": false,
     "files": [
       "main.js",
       "preload.js",
@@ -29,27 +30,35 @@
         "to": "backend",
         "filter": [
           "**/*",
+          "data/dist/**",
           "!**/venv/**",
           "!**/.venv/**",
           "!**/__pycache__/**",
           "!**/*.pyc",
           "!**/build/**",
-          "!**/dist/**",
           "!**/.git/**",
           "!**/node_modules/**",
           "!**/.env",
           "!**/.env.*",
-          "!**/data/**",
           "!**/*.log",
           "!**/main.spec",
           "!**/.vscode/**",
           "!**/.idea/**",
           "!**/.DS_Store",
-          "!**/Thumbs.db"
+          "!**/Thumbs.db",
+          "!**/webui/frontend/**",
+          "!**/screenshots/**",
+          "!**/docs/**",
+          "!**/.github/**",
+          "!**/Dockerfile",
+          "!**/docker-compose.yml",
+          "!**/.dockerignore"
         ]
       }
     ],
     "win": {
+      "icon": "assets/KD-LOGO.ico",
+      "requestedExecutionLevel": "requireAdministrator",
       "target": [
         {
           "target": "nsis",
@@ -59,10 +68,11 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "KiraAI",
+      "shortcutName": "kiraAI-DeskTop",
       "include": "build/installer.nsh"
     }
   },
