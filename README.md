@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![KiraAI](https://img.shields.io/badge/KiraAI_v2.12.0-00d4ff?style=for-the-badge) ![Electron](https://img.shields.io/badge/Electron-28.0-47848f?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge)
+![KiraAI](https://img.shields.io/badge/KiraAI_v2.13.0-00d4ff?style=for-the-badge) ![Electron](https://img.shields.io/badge/Electron-28.0-47848f?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge)
 
 **KiraAI 桌面客户端 - 一键安装，开箱即用**
 
@@ -18,14 +18,14 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ## 功能特性
 
-- **一键安装** - NSIS 安装向导，自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`(请一定一定一定不要安装在programfiles文件夹里，无法使用后果自负)
+- **一键安装** - NSIS 安装向导，自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`
 - **自动环境配置** - 首次运行自动创建 Python 虚拟环境并安装依赖（清华镜像加速）
 - **离线可用** - Vue.js SPA 前端预编译打包，无需联网下载
 - **加载动画** - 优雅的启动加载界面，实时显示后端日志
 - **系统集成** - 桌面快捷方式、开始菜单快捷方式
 - **管理员权限** - 默认以管理员身份运行，确保所有功能正常
 - **数据分离** - 用户数据独立存储在 `%LOCALAPPDATA%\kiraAI-DeskTop\`，卸载不影响数据
-- **完整功能** - 包含 KiraAI v2.12.0 全部功能（MCP、Skills、异步数据库等）
+- **完整功能** - 包含 KiraAI v2.13.0 全部功能（MCP、Skills、异步数据库等）
 
 ## 系统要求
 
@@ -58,7 +58,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
       │   ├── preload.js          # 预加载脚本
       │   ├── loading.html        # 加载窗口
       │   └── assets/             # 图标等资源
-      └── backend/                # KiraAI v2.12.0 后端
+      └── backend/                # KiraAI v2.13.0 后端
           ├── main.py             # 后端入口
           ├── core/               # 核心模块
           │   ├── adapter/        # 平台适配器 (QQ/Telegram/微信/B站)
@@ -113,7 +113,7 @@ npm install
 npm run build
 # 复制构建产物到 data/dist/
 xcopy webui\static\dist backend\data\dist\ /E /Y
-echo v2.12.0 > backend\data\dist\\.version
+echo v2.13.0 > backend\data\dist\\.version
 
 # 返回项目根目录
 cd ..\..

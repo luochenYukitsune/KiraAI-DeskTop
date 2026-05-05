@@ -151,6 +151,30 @@ export interface McpServerConfigUpdateRequest {
   config: any
 }
 
+// Plugin Store types
+export interface PluginStoreSource {
+  id: string
+  name: string
+  url: string
+  cache_file?: string | null
+  updated_at: number
+  is_current: boolean
+  created_at: number
+}
+
+export interface PluginStoreItem {
+  id: string
+  name: string
+  version: string
+  author: string
+  description: string
+  category?: string
+  repo?: string | null
+  icon?: string | null
+  downloads?: number
+  installed?: boolean
+}
+
 // Configuration types — mirrors the shape returned by webui/routes/config.py
 export interface ConfigurationProvider {
   id: string

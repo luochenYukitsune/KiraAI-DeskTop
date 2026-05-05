@@ -5,6 +5,7 @@ import os
 import json
 import sys
 import types
+import httpx
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable, Union
 from core.utils.path_utils import get_data_path, get_config_path
@@ -1095,3 +1096,16 @@ class PluginManager:
             if not plugin_root.is_dir():
                 continue
             await self.load_plugin_from_dir(plugin_root)
+
+    @staticmethod
+    async def fetch_plugin_store_data(url: str) -> Any:
+        """
+        Fetch the raw JSON data from a plugin store source URL.
+
+        Returns the complete original JSON (including ``meta``, ``plugins``, etc.).
+        Callers should extract the ``plugins`` collection themselves.
+        """
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.json()
