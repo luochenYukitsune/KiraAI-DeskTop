@@ -1,84 +1,88 @@
 {
-  "name": "kiraAI-DeskTop",
-  "version": "2.13.0",
-  "description": "KiraAI Desktop Application",
-  "main": "main.js",
-  "author": "KiraAI Team",
-  "license": "MIT",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win",
-    "build:dir": "electron-builder --win --dir",
-    "postinstall": "electron-builder install-app-deps"
-  },
-  "build": {
-    "appId": "com.kiraai.desktop",
-    "productName": "kiraAI-DeskTop",
-    "directories": {
-      "output": "../KiraAI-Dist"
-    },
-    "asar": false,
-    "files": [
-      "main.js",
-      "preload.js",
-      "loading.html",
-      "assets/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "data/dist/**",
-          "!**/venv/**",
-          "!**/.venv/**",
-          "!**/__pycache__/**",
-          "!**/*.pyc",
-          "!**/build/**",
-          "!**/.git/**",
-          "!**/node_modules/**",
-          "!**/.env",
-          "!**/.env.*",
-          "!**/*.log",
-          "!**/main.spec",
-          "!**/.vscode/**",
-          "!**/.idea/**",
-          "!**/.DS_Store",
-          "!**/Thumbs.db",
-          "!**/webui/frontend/**",
-          "!**/screenshots/**",
-          "!**/docs/**",
-          "!**/.github/**",
-          "!**/Dockerfile",
-          "!**/docker-compose.yml",
-          "!**/.dockerignore"
-        ]
-      }
-    ],
-    "win": {
-      "icon": "assets/KD-LOGO.ico",
-      "requestedExecutionLevel": "requireAdministrator",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "kiraAI-DeskTop",
-      "include": "build/installer.nsh"
-    }
-  },
-  "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "dependencies": {}
+    "name":  "kiraAI-DeskTop",
+    "version":  "2.14.0",
+    "description":  "KiraAI Desktop Application",
+    "main":  "main.js",
+    "author":  "KiraAI Team",
+    "license":  "MIT",
+    "scripts":  {
+                    "start":  "electron .",
+                    "build":  "electron-builder --win",
+                    "build:dir":  "electron-builder --win --dir",
+                    "postinstall":  "electron-builder install-app-deps"
+                },
+    "build":  {
+                  "appId":  "com.kiraai.desktop",
+                  "productName":  "kiraAI-DeskTop",
+                  "directories":  {
+                                      "output":  "../KiraAI-Dist"
+                                  },
+                  "asar":  false,
+                  "files":  [
+                                "main.js",
+                                "preload.js",
+                                "loading.html",
+                                "assets/**/*"
+                            ],
+                  "extraResources":  [
+                                         {
+                                             "from":  "backend",
+                                             "to":  "backend",
+                                             "filter":  [
+                                                            "**/*",
+                                                            "data/dist/**",
+                                                            "!**/venv/**",
+                                                            "!**/.venv/**",
+                                                            "!**/__pycache__/**",
+                                                            "!**/*.pyc",
+                                                            "!**/build/**",
+                                                            "!**/.git/**",
+                                                            "!**/node_modules/**",
+                                                            "!**/.env",
+                                                            "!**/.env.*",
+                                                            "!**/*.log",
+                                                            "!**/main.spec",
+                                                            "!**/.vscode/**",
+                                                            "!**/.idea/**",
+                                                            "!**/.DS_Store",
+                                                            "!**/Thumbs.db",
+                                                            "!**/webui/frontend/**",
+                                                            "!**/screenshots/**",
+                                                            "!**/docs/**",
+                                                            "!**/.github/**",
+                                                            "!**/Dockerfile",
+                                                            "!**/docker-compose.yml",
+                                                            "!**/.dockerignore"
+                                                        ]
+                                         }
+                                     ],
+                  "win":  {
+                              "icon":  "assets/KD-LOGO.ico",
+                              "requestedExecutionLevel":  "requireAdministrator",
+                              "target":  [
+                                             {
+                                                 "target":  "nsis",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ]
+                          },
+                  "nsis":  {
+                               "oneClick":  false,
+                               "perMachine":  false,
+                               "allowToChangeInstallationDirectory":  false,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "shortcutName":  "kiraAI-DeskTop",
+                               "include":  "build/installer.nsh"
+                           }
+              },
+    "devDependencies":  {
+                            "electron":  "^28.0.0",
+                            "electron-builder":  "^24.9.1"
+                        },
+    "dependencies":  {
+
+                     }
 }
