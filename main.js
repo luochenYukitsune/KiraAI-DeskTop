@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
@@ -322,8 +322,9 @@ function createWindow() {
 
 app.whenReady().then(async () => {
     try {
+        Menu.setApplicationMenu(null);
         console.log('Starting KiraAI Desktop...');
-        
+
         createLoadingWindow();
         
         loadBackendConfig();
