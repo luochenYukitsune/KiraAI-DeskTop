@@ -16,6 +16,12 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 
 KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模型（LLM）和各种聊天平台（QQ、Telegram、微信），以虚拟生命体为中心进行交互。
 
+##项目网盘发布地址
+
+kiraAI-desktop，长期有效
+链接：https://1817016714.share.123865.com/123pan/m3vVVv-1J2D3?pwd=lxxr#
+提取码：lxxr
+
 ## 功能特性
 
 - **一键安装** - NSIS 安装向导，自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`
