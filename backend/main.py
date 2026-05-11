@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import os
+import sys
 
 
 kira_logo = r"""
@@ -61,8 +62,22 @@ if __name__ == "__main__":
         _packaged_data_dir = env_data_dir
 
     if is_packaged and _packaged_data_dir is None:
-        appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        _packaged_data_dir = os.path.join(appdata, "kiraAI-DeskTop")
+        if sys.platform == "win32":
+            appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+            _packaged_data_dir = os.path.join(appdata, "kiraAI-DeskTop")
+        elif sys.platform == "darwin":
+            _packaged_data_dir = os.path.join(
+                os.path.expanduser("~/Library/Application Support"),
+                "kiraAI-DeskTop",
+                "backend",
+            )
+        else:
+            xdg_config = os.environ.get(
+                "XDG_CONFIG_HOME", os.path.expanduser("~/.config")
+            )
+            _packaged_data_dir = os.path.join(
+                xdg_config, "kiraAI-DeskTop", "backend"
+            )
 
     # webui dist is downloaded at runtime; let it default to <data_dir>/dist
     # so it lands in the user-writable data directory, not the read-only bundle.

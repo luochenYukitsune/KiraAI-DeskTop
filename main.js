@@ -130,7 +130,10 @@ function startBackend() {
         try {
             fs.mkdirSync(backendDataDir, { recursive: true });
         } catch (e) {
-            console.warn(`Failed to create data dir ${backendDataDir}:`, e.message);
+            const error = new Error(`无法创建数据目录\n\n路径: ${backendDataDir}\n错误: ${e.message}`);
+            sendToLoadingWindow('backend-error', { message: error.message });
+            reject(error);
+            return;
         }
 
         const backendEnv = { ...process.env, KIRAAI_DATA_DIR: backendDataDir };
