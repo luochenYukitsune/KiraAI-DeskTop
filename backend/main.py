@@ -43,21 +43,37 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    # detect Electron packaged environment
+    # detect Electron packaged environment (case-insensitive: "resources" on
+    # Windows/Linux, "Resources" on macOS)
     parent_dir = os.path.dirname(script_dir)
-    is_packaged = os.path.basename(parent_dir) == "resources"
-    if is_packaged:
+    is_packaged = os.path.basename(parent_dir).lower() == "resources"
+
+    _packaged_data_dir = None
+    _packaged_webui_dir = None
+
+    # Data dir priority: --data-dir CLI > KIRAAI_DATA_DIR env > legacy
+    # per-platform fallback. The env var is set by Electron (main.js) so the
+    # backend writes to the standard OS location instead of inside the .app
+    # bundle. The legacy fallback exists only for backward compatibility with
+    # older Windows installs that didn't set the env var.
+    env_data_dir = os.environ.get("KIRAAI_DATA_DIR")
+    if env_data_dir:
+        _packaged_data_dir = env_data_dir
+
+    if is_packaged and _packaged_data_dir is None:
         appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
         _packaged_data_dir = os.path.join(appdata, "kiraAI-DeskTop")
-        _packaged_webui_dir = os.path.join(script_dir, "data", "dist")
+
+    # webui dist is downloaded at runtime; let it default to <data_dir>/dist
+    # so it lands in the user-writable data directory, not the read-only bundle.
 
     # parse CLI args and apply path overrides
     args = _parse_args()
     from core.utils.path_utils import init_paths, get_data_path
 
     init_paths(
-        data_dir=args.data_dir if args.data_dir else (_packaged_data_dir if is_packaged else None),
-        webui_dir=args.webui_dir if args.webui_dir else (_packaged_webui_dir if is_packaged else None),
+        data_dir=args.data_dir if args.data_dir else _packaged_data_dir,
+        webui_dir=args.webui_dir if args.webui_dir else _packaged_webui_dir,
     )
 
     sub_data_folders = ["config", "memory", "plugins", "files", "temp", "sticker", "skills"]

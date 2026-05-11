@@ -28,11 +28,16 @@ function getRunBatPath() {
 }
 
 function getBackendDataDir() {
-    if (app.isPackaged) {
+    if (!app.isPackaged) {
+        return path.join(getBackendDir(), 'data');
+    }
+    if (process.platform === 'win32') {
         const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local');
         return path.join(localAppData, 'kiraAI-DeskTop');
     }
-    return path.join(getBackendDir(), 'data');
+    // macOS: ~/Library/Application Support/kiraAI-DeskTop/backend
+    // Linux: ~/.config/kiraAI-DeskTop/backend
+    return path.join(app.getPath('userData'), 'backend');
 }
 
 function loadBackendConfig() {
@@ -121,10 +126,21 @@ function startBackend() {
             return;
         }
 
+        const backendDataDir = getBackendDataDir();
+        try {
+            fs.mkdirSync(backendDataDir, { recursive: true });
+        } catch (e) {
+            console.warn(`Failed to create data dir ${backendDataDir}:`, e.message);
+        }
+
+        const backendEnv = { ...process.env, KIRAAI_DATA_DIR: backendDataDir };
+
         sendToLoadingWindow('backend-status', { status: '正在启动后端服务...' });
         sendToLoadingWindow('backend-log', { line: `Working directory: ${backendDir}`, type: 'info' });
+        sendToLoadingWindow('backend-log', { line: `Data directory: ${backendDataDir}`, type: 'info' });
 
         console.log(`Working directory: ${backendDir}`);
+        console.log(`Data directory: ${backendDataDir}`);
 
         if (process.platform === 'win32') {
             try {
@@ -148,7 +164,7 @@ function startBackend() {
                 stdio: ['ignore', 'pipe', 'pipe'],
                 detached: false,
                 windowsHide: true,
-                env: process.env,
+                env: backendEnv,
                 shell: true
             });
         } else {
@@ -164,7 +180,7 @@ function startBackend() {
             backendProcess = spawn('/bin/bash', [runShPath], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
-                env: process.env
+                env: backendEnv
             });
         }
         
@@ -304,15 +320,25 @@ function createWindow() {
     });
     
     mainWindow.on('close', (event) => {
-        if (!isQuitting) {
-            event.preventDefault();
-            isQuitting = true;
-            mainWindow.hide();
-            stopBackend();
-            setTimeout(() => {
-                app.quit();
-            }, 2000);
+        if (isQuitting) {
+            return;
         }
+        if (process.platform === 'darwin') {
+            // macOS convention: closing the window only hides it; the app
+            // (and backend) keep running. Use Cmd+Q or the Quit menu item
+            // to actually exit, which triggers the before-quit handler.
+            event.preventDefault();
+            mainWindow.hide();
+            return;
+        }
+        // Windows/Linux: close triggers full shutdown.
+        event.preventDefault();
+        isQuitting = true;
+        mainWindow.hide();
+        stopBackend();
+        setTimeout(() => {
+            app.quit();
+        }, 2000);
     });
     
     mainWindow.on('closed', () => {
@@ -352,6 +378,8 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (mainWindow === null) {
         createWindow();
+    } else if (!mainWindow.isVisible()) {
+        mainWindow.show();
     }
 });
 

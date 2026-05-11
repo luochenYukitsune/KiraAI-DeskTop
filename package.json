@@ -9,6 +9,9 @@
                     "start":  "electron .",
                     "build":  "electron-builder --win",
                     "build:dir":  "electron-builder --win --dir",
+                    "build:mac":  "electron-builder --mac",
+                    "build:mac:arm":  "electron-builder --mac --arm64",
+                    "build:mac:x64":  "electron-builder --mac --x64",
                     "postinstall":  "electron-builder install-app-deps"
                 },
     "build":  {
@@ -76,7 +79,40 @@
                                "createStartMenuShortcut":  true,
                                "shortcutName":  "kiraAI-DeskTop",
                                "include":  "build/installer.nsh"
-                           }
+                           },
+                  "mac":  {
+                              "icon":  "assets/KD-LOGO.icns",
+                              "category":  "public.app-category.productivity",
+                              "target":  [
+                                             {
+                                                 "target":  "dmg",
+                                                 "arch":  [
+                                                              "arm64",
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ],
+                              "hardenedRuntime":  false,
+                              "gatekeeperAssess":  false,
+                              "identity":  null
+                          },
+                  "dmg":  {
+                              "title":  "kiraAI-DeskTop ${version}",
+                              "icon":  "assets/KD-LOGO.icns",
+                              "contents":  [
+                                               {
+                                                   "x":  130,
+                                                   "y":  220,
+                                                   "type":  "file"
+                                               },
+                                               {
+                                                   "x":  410,
+                                                   "y":  220,
+                                                   "type":  "link",
+                                                   "path":  "/Applications"
+                                               }
+                                           ]
+                          }
               },
     "devDependencies":  {
                             "electron":  "^28.0.0",
