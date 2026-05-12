@@ -1,12 +1,13 @@
 {
     "name":  "kiraAI-DeskTop",
-    "version":  "2.14.0",
+    "version":  "2.15.0",
     "description":  "KiraAI Desktop Application",
     "main":  "main.js",
     "author":  "KiraAI Team",
-    "license":  "MIT",
+    "license":  "AGPL-3.0",
     "scripts":  {
                     "start":  "electron .",
+                    "prebuild":  "cd backend/webui/frontend && npm install && npm run build",
                     "build":  "electron-builder --win",
                     "build:dir":  "electron-builder --win --dir",
                     "build:mac":  "electron-builder --mac",
@@ -20,7 +21,7 @@
                   "directories":  {
                                       "output":  "../KiraAI-Dist"
                                   },
-                  "asar":  false,
+                  "asar":  true,
                   "files":  [
                                 "main.js",
                                 "preload.js",
@@ -74,7 +75,7 @@
                   "nsis":  {
                                "oneClick":  false,
                                "perMachine":  false,
-                               "allowToChangeInstallationDirectory":  false,
+                               "allowToChangeInstallationDirectory":  true,
                                "createDesktopShortcut":  true,
                                "createStartMenuShortcut":  true,
                                "shortcutName":  "kiraAI-DeskTop",

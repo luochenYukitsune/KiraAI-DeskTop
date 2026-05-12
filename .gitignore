@@ -9,6 +9,7 @@ pnpm-debug.log*
 dist/
 out/
 release/
+../KiraAI-Dist/
 *.dmg
 *.dmg.blockmap
 *.exe
@@ -20,6 +21,7 @@ release/
 *.snap
 *.pkg
 *.msi
+*.blockmap
 latest*.yml
 builder-debug.yml
 builder-effective-config.yaml
@@ -39,10 +41,17 @@ backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
 
+# Backend WebUI frontend build artifacts
+backend/webui/frontend/node_modules/
+backend/webui/frontend/.vite/
+backend/webui/frontend/dist/
+
 # Environment / secrets
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.env.*
 *.pem
 *.key
 
