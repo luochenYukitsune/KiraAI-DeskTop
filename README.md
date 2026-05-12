@@ -22,7 +22,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 - **一键安装** - Windows NSIS 向导自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`；macOS 拖动到 Applications 即可
 - **自动环境配置** - 首次运行自动检测 Python 3.10+，创建虚拟环境并安装依赖
 - **离线可用** - Vue.js SPA 前端预编译打包（Windows），无需联网下载
-- **加载动画** - 优雅的启动加载界面，实时显示后端日志
+- **加载动画** - 优雅地启动加载界面，实时显示后端日志
 - **系统集成** - Windows 桌面/开始菜单快捷方式；macOS Launchpad 集成
 - **管理员权限**（Windows）- 默认以管理员身份运行，确保所有功能正常
 - **macOS 原生交互** - 关闭窗口仅隐藏，App 与后端保持运行；点击 Dock 图标即可重新唤起；Cmd+Q 才真正退出
@@ -74,7 +74,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ## 目录结构
 
-```
+```text
 安装目录（Windows）: %LOCALAPPDATA%\Programs\kiraAI-DeskTop\
 安装目录（macOS）  : /Applications/kiraAI-DeskTop.app/Contents/
   └── resources/                  # Windows 小写 / macOS 大写 Resources

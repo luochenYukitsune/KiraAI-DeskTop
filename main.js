@@ -328,12 +328,17 @@ function createWindow() {
         if (isQuitting) {
             return;
         }
+        const safeHide = () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.hide();
+            }
+        };
         if (process.platform === 'darwin') {
             // macOS convention: closing the window only hides it; the app
             // (and backend) keep running. Use Cmd+Q or the Quit menu item
             // to actually exit, which triggers the before-quit handler.
             event.preventDefault();
-            mainWindow.hide();
+            safeHide();
             return;
         }
         // Windows/Linux: confirm before shutting down the backend.
@@ -351,7 +356,7 @@ function createWindow() {
 
         if (response === 0) {
             isQuitting = true;
-            mainWindow.hide();
+            safeHide();
             stopBackend();
             setTimeout(() => {
                 app.quit();

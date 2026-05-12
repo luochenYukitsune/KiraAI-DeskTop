@@ -37,7 +37,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 // can't fix it in the source — patch the rendered DOM instead.
 if (process.platform === 'darwin') {
     const ORIGINAL = 'data/webui.json';
-    const REPLACEMENT = '~/Library/Application Support/kiraAI-DeskTop/backend/webui.json';
+    // Default fallback; the real path is fetched from main process below so
+    // this stays in sync with getBackendDataDir() if it ever changes.
+    let REPLACEMENT = '~/Library/Application Support/kiraAI-DeskTop/backend/webui.json';
 
     const patchTextNodes = (root) => {
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -48,6 +50,15 @@ if (process.platform === 'darwin') {
             }
         }
     };
+
+    // Resolve the real backend data dir from the main process; re-patch once
+    // we have it in case the SPA already rendered with the fallback value.
+    ipcRenderer.invoke('get-data-dir').then((dir) => {
+        if (dir && typeof dir === 'string') {
+            REPLACEMENT = `${dir}/webui.json`;
+            if (document.body) patchTextNodes(document.body);
+        }
+    }).catch(() => {});
 
     window.addEventListener('DOMContentLoaded', () => {
         patchTextNodes(document.body);
@@ -64,7 +75,10 @@ if (process.platform === 'darwin') {
                                 n.nodeValue = n.nodeValue.split(ORIGINAL).join(REPLACEMENT);
                             }
                         } else if (n.nodeType === Node.ELEMENT_NODE) {
-                            patchTextNodes(n);
+                            // Cheap pre-check before walking the subtree.
+                            if (n.textContent && n.textContent.includes(ORIGINAL)) {
+                                patchTextNodes(n);
+                            }
                         }
                     });
                 }
