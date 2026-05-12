@@ -137,31 +137,41 @@ npm install
 npm start
 ```
 
-### 打包构建
+### 打包构建（Windows）
 
-```bash
+PowerShell / CMD：
+
+```powershell
 # 构建前端 (Vue.js SPA)
-cd backend/webui/frontend
+cd backend\webui\frontend
 npm install
 npm run build
 # 复制构建产物到 data/dist/
-xcopy webui\static\dist backend\data\dist\ /E /Y
-echo v2.13.0 > backend\data\dist\\.version
+xcopy webui\static\dist ..\..\data\dist\ /E /Y
+echo v2.13.0 > ..\..\data\dist\.version
 
 # 返回项目根目录
-cd ..\..
+cd ..\..\..
 
-# 构建 Windows 安装包
+# 构建 NSIS 安装包
 npm run build
 
 # 构建解压版（不打包安装程序）
 npm run build:dir
+```
 
-# 构建 macOS dmg（必须在 macOS 上执行，会同时打 arm64 + x64）
-npm run build:mac
-# 只打当前架构
-npm run build:mac:arm    # Apple Silicon
-npm run build:mac:x64    # Intel
+### 打包构建（macOS）
+
+macOS 的前端 dist 由后端首次启动时按需下载，**无需**手动构建前端目录。
+
+```bash
+# 在仓库根目录执行（必须在 macOS 主机上）
+npm install
+npm run build:mac          # 同时打 arm64 + x64 dmg
+
+# 仅打单一架构：
+npm run build:mac:arm      # Apple Silicon
+npm run build:mac:x64      # Intel
 ```
 
 构建输出目录：`../KiraAI-Dist/`
