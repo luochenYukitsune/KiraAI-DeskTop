@@ -15,6 +15,17 @@
       </h2>
     </div>
     <div class="flex items-center gap-2">
+      <!-- Open Data Directory -->
+      <button
+        class="p-1.5 rounded-lg bg-[#f5f5f5] hover:bg-[#e7e7e8] dark:bg-[#121215] dark:hover:bg-[#2b2b2e] text-gray-500 dark:text-gray-400 transition-colors"
+        :aria-label="t('header.open_data_dir')"
+        :title="t('header.open_data_dir')"
+        @click="handleOpenDataDir"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+      </button>
       <!-- GitHub -->
       <a
         href="https://github.com/xxynet/KiraAI"
@@ -77,6 +88,31 @@ async function handleLogout() {
     await authStore.logout()
   } finally {
     router.push('/login')
+  }
+}
+
+async function handleOpenDataDir() {
+  const api = (window as any).electronAPI
+  if (api?.isElectron) {
+    const result = await api.openDataDir()
+    if (!result?.success) {
+      console.error(result?.error || 'Failed to open data directory')
+    }
+  } else {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/data-dir', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.path) {
+          alert(t('header.data_dir_path') + ': ' + data.path)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to get data directory:', e)
+    }
   }
 }
 </script>

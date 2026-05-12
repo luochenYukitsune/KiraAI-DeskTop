@@ -6,6 +6,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
 
 from core.config.default import VERSION
+from core.utils.path_utils import get_data_path
 from webui.models import LoginResponse, TokenLoginRequest, VersionResponse
 from webui.routes.base import RouteDefinition, Routes
 from webui.utils import _create_jwt_token, _verify_jwt_token
@@ -74,6 +75,13 @@ class AuthRoutes(Routes):
                 tags=["auth"],
                 dependencies=[Depends(require_auth)],
             ),
+            RouteDefinition(
+                path="/api/data-dir",
+                methods=["GET"],
+                endpoint=self.get_data_dir,
+                tags=["system"],
+                dependencies=[Depends(require_auth)],
+            ),
         ]
 
     def register_spa_fallback(self):
@@ -134,6 +142,9 @@ class AuthRoutes(Routes):
 
     async def health(self):
         return {"status": "ok", "lifecycle_available": self.lifecycle is not None}
+
+    async def get_data_dir(self):
+        return {"path": str(get_data_path())}
 
     async def get_version(self):
         return VersionResponse(version=VERSION)

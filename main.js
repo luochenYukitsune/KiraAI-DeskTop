@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
@@ -56,7 +56,7 @@ function sendToLoadingWindow(channel, data) {
     }
 }
 
-function checkBackendHealth(interval = 1000, maxAttempts = 120) {
+function checkBackendHealth(interval = 1000, maxAttempts = 300) {
     return new Promise((resolve, reject) => {
         let attempts = 0;
         let settled = false;
@@ -100,7 +100,7 @@ function checkBackendHealth(interval = 1000, maxAttempts = 120) {
                 scheduleNext();
             });
 
-            req.setTimeout(2000, () => {
+            req.setTimeout(5000, () => {
                 req.destroy();
                 scheduleNext();
             });
@@ -272,7 +272,9 @@ function createWindow() {
     });
     
     mainWindow.loadURL(`${BACKEND_URL}/login`);
-    
+
+    mainWindow.setMenuBarVisibility(false);
+
     mainWindow.once('ready-to-show', () => {
         if (loadingWindow && !loadingWindow.isDestroyed()) {
             loadingWindow.close();
@@ -303,15 +305,29 @@ function createWindow() {
         return { action: 'deny' };
     });
     
-    mainWindow.on('close', (event) => {
+    mainWindow.on('close', async (event) => {
         if (!isQuitting) {
             event.preventDefault();
-            isQuitting = true;
-            mainWindow.hide();
-            stopBackend();
-            setTimeout(() => {
-                app.quit();
-            }, 2000);
+
+            const { response } = await dialog.showMessageBox(mainWindow, {
+                type: 'question',
+                buttons: ['退出', '取消'],
+                defaultId: 1,
+                cancelId: 1,
+                title: 'KiraAI',
+                message: '确认退出 KiraAI？',
+                detail: '退出后后端服务将一并关闭，所有连接将断开。',
+                icon: path.join(__dirname, 'assets', 'KD-LOGO.ico')
+            });
+
+            if (response === 0) {
+                isQuitting = true;
+                mainWindow.hide();
+                stopBackend();
+                setTimeout(() => {
+                    app.quit();
+                }, 2000);
+            }
         }
     });
     
@@ -322,9 +338,8 @@ function createWindow() {
 
 app.whenReady().then(async () => {
     try {
-        Menu.setApplicationMenu(null);
         console.log('Starting KiraAI Desktop...');
-
+        
         createLoadingWindow();
         
         loadBackendConfig();
@@ -366,6 +381,22 @@ app.on('will-quit', () => {
 });
 
 ipcMain.handle('get-backend-url', () => BACKEND_URL);
+
+ipcMain.handle('open-data-dir', async () => {
+    const dataDir = getBackendDataDir();
+    if (fs.existsSync(dataDir)) {
+        const error = await shell.openPath(dataDir);
+        if (error) {
+            return { success: false, error: `打开目录失败: ${error}` };
+        }
+        return { success: true };
+    }
+    return { success: false, error: `目录不存在: ${dataDir}` };
+});
+
+ipcMain.handle('get-data-dir', () => {
+    return getBackendDataDir();
+});
 
 ipcMain.handle('restart-backend', async () => {
     stopBackend();

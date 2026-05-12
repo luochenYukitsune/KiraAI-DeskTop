@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![KiraAI](https://img.shields.io/badge/KiraAI-00d4ff?style=for-the-badge) ![Electron](https://img.shields.io/badge/Electron-28.0-47848f?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge)
+![KiraAI](https://img.shields.io/badge/KiraAI_v2.13.0-00d4ff?style=for-the-badge) ![Electron](https://img.shields.io/badge/Electron-28.0-47848f?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge)
 
 **KiraAI 桌面客户端 - 一键安装，开箱即用**
 
@@ -16,12 +16,6 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 
 KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模型（LLM）和各种聊天平台（QQ、Telegram、微信），以虚拟生命体为中心进行交互。
 
-## 项目网盘发布地址
-
-kiraAI-desktop，长期有效
-链接：https://1817016714.share.123865.com/123pan/m3vVVv-1J2D3?pwd=lxxr#
-提取码：lxxr
-
 ## 功能特性
 
 - **一键安装** - NSIS 安装向导，自动安装到 `%LOCALAPPDATA%\Programs\kiraAI-DeskTop`
@@ -31,7 +25,7 @@ kiraAI-desktop，长期有效
 - **系统集成** - 桌面快捷方式、开始菜单快捷方式
 - **管理员权限** - 默认以管理员身份运行，确保所有功能正常
 - **数据分离** - 用户数据独立存储在 `%LOCALAPPDATA%\kiraAI-DeskTop\`，卸载不影响数据
-- **完整功能** - 包含 KiraAI 全部功能（MCP、Skills、异步数据库等）
+- **完整功能** - 包含 KiraAI v2.13.0 全部功能（MCP、Skills、异步数据库等）
 
 ## 系统要求
 
@@ -42,7 +36,7 @@ kiraAI-desktop，长期有效
 
 ### 安装包
 
-1. 运行 `kiraAI-DeskTop Setup x.x.x.exe`
+1. 运行 `kiraAI-DeskTop Setup 2.12.0.exe`
 2. 按向导完成安装
 3. 双击桌面快捷方式 `kiraAI-DeskTop` 启动
 
@@ -64,7 +58,7 @@ kiraAI-desktop，长期有效
       │   ├── preload.js          # 预加载脚本
       │   ├── loading.html        # 加载窗口
       │   └── assets/             # 图标等资源
-      └── backend/                # KiraAI  后端
+      └── backend/                # KiraAI v2.13.0 后端
           ├── main.py             # 后端入口
           ├── core/               # 核心模块
           │   ├── adapter/        # 平台适配器 (QQ/Telegram/微信/B站)
@@ -119,7 +113,7 @@ npm install
 npm run build
 # 复制构建产物到 data/dist/
 xcopy webui\static\dist backend\data\dist\ /E /Y
-echo v(版本号) > backend\data\dist\\.version
+echo v2.13.0 > backend\data\dist\\.version
 
 # 返回项目根目录
 cd ..\..

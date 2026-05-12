@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     getBackendUrl: () => ipcRenderer.invoke('get-backend-url'),
     restartBackend: () => ipcRenderer.invoke('restart-backend'),
+    openDataDir: () => ipcRenderer.invoke('open-data-dir'),
+    getDataDir: () => ipcRenderer.invoke('get-data-dir'),
 
     onBackendStatus: (cb) => {
         const listener = (_e, data) => cb(data);
