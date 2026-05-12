@@ -42,7 +42,7 @@ KiraAI 是一个模块化、多平台的 AI 虚拟生命体，连接大语言模
 
 ### Windows 安装
 
-1. 运行 `kiraAI-DeskTop Setup 2.12.0.exe`
+1. 运行 `kiraAI-DeskTop Setup <version>.exe`
 2. 按向导完成安装
 3. 双击桌面快捷方式 `kiraAI-DeskTop` 启动
 
@@ -147,7 +147,7 @@ cd backend\webui\frontend
 npm install
 npm run build
 # 复制构建产物到 data/dist/
-xcopy webui\static\dist ..\..\data\dist\ /E /Y
+xcopy ..\static\dist ..\..\data\dist\ /E /Y
 echo v2.13.0 > ..\..\data\dist\.version
 
 # 返回项目根目录
