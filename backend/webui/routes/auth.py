@@ -6,7 +6,6 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse
 
 from core.config.default import VERSION
-from core.utils.path_utils import get_data_path
 from webui.models import LoginResponse, TokenLoginRequest, VersionResponse
 from webui.routes.base import RouteDefinition, Routes
 from webui.utils import _create_jwt_token, _verify_jwt_token
@@ -25,10 +24,11 @@ async def require_auth(authorization: Optional[str] = Header(None)) -> str:
 
 
 class AuthRoutes(Routes):
-    def __init__(self, app, lifecycle, access_token: str, dist_dir: Path):
+    def __init__(self, app, lifecycle, access_token: str, dist_dir: Path, disable_auth: bool = False):
         super().__init__(app, lifecycle)
         self.access_token = access_token
         self.dist_dir = dist_dir
+        self.disable_auth = disable_auth
 
     def get_routes(self):
         return [
@@ -61,6 +61,12 @@ class AuthRoutes(Routes):
                 dependencies=[Depends(require_auth)],
             ),
             RouteDefinition(
+                path="/api/auth/config",
+                methods=["GET"],
+                endpoint=self.get_auth_config,
+                tags=["auth"],
+            ),
+            RouteDefinition(
                 path="/api/auth/login",
                 methods=["POST"],
                 endpoint=self.token_login,
@@ -73,13 +79,6 @@ class AuthRoutes(Routes):
                 endpoint=self.logout,
                 status_code=status.HTTP_204_NO_CONTENT,
                 tags=["auth"],
-                dependencies=[Depends(require_auth)],
-            ),
-            RouteDefinition(
-                path="/api/data-dir",
-                methods=["GET"],
-                endpoint=self.get_data_dir,
-                tags=["system"],
                 dependencies=[Depends(require_auth)],
             ),
         ]
@@ -140,11 +139,11 @@ class AuthRoutes(Routes):
             status_code=503,
         )
 
+    async def get_auth_config(self):
+        return {"auth_enabled": not self.disable_auth}
+
     async def health(self):
         return {"status": "ok", "lifecycle_available": self.lifecycle is not None}
-
-    async def get_data_dir(self):
-        return {"path": str(get_data_path())}
 
     async def get_version(self):
         return VersionResponse(version=VERSION)

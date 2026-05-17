@@ -35,6 +35,12 @@ def _parse_args() -> argparse.Namespace:
         default=False,
         help="Skip frontend dist version check (useful during development with --webui-dir)",
     )
+    parser.add_argument(
+        "--disable-webui-auth",
+        action="store_true",
+        default=False,
+        help="Disable WebUI authentication (use a fixed token so Electron can auto-login)",
+    )
     return parser.parse_args()
 
 
@@ -43,21 +49,13 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    # detect Electron packaged environment
-    parent_dir = os.path.dirname(script_dir)
-    is_packaged = os.path.basename(parent_dir) == "resources"
-    if is_packaged:
-        appdata = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        _packaged_data_dir = os.path.join(appdata, "kiraAI-DeskTop")
-        _packaged_webui_dir = os.path.join(script_dir, "data", "dist")
-
     # parse CLI args and apply path overrides
     args = _parse_args()
-    from core.utils.path_utils import init_paths, get_data_path
+    from core.utils.path_utils import init_paths, get_data_path, get_root_path
 
     init_paths(
-        data_dir=args.data_dir if args.data_dir else (_packaged_data_dir if is_packaged else None),
-        webui_dir=args.webui_dir if args.webui_dir else (_packaged_webui_dir if is_packaged else None),
+        data_dir=args.data_dir,
+        webui_dir=args.webui_dir,
     )
 
     sub_data_folders = ["config", "memory", "plugins", "files", "temp", "sticker", "skills"]
@@ -76,10 +74,28 @@ if __name__ == "__main__":
         logger.info(f"Using data dir override: {args.data_dir}")
     if args.webui_dir:
         logger.info(f"Using webui dir override: {args.webui_dir}")
+    if args.disable_webui_auth:
+        logger.info("WebUI authentication disabled")
+
+    # recover from any incomplete update left by a previous crash
+    import shutil
+    for bak in get_root_path().glob("*.bak"):
+        original = bak.with_suffix("")
+        if original.exists():
+            if bak.is_dir():
+                shutil.rmtree(bak)
+            else:
+                bak.unlink()
+        else:
+            bak.rename(original)
+            logger.info(f"Recovered {original.name} from incomplete update")
 
     from core.launcher import KiraLauncher
 
-    launcher = KiraLauncher(ignore_webui_version_check=args.ignore_webui_version_check)
+    launcher = KiraLauncher(
+        ignore_webui_version_check=args.ignore_webui_version_check,
+        disable_webui_auth=args.disable_webui_auth,
+    )
 
     try:
         asyncio.run(launcher.start())

@@ -28,11 +28,8 @@ function getRunBatPath() {
 }
 
 function getBackendDataDir() {
-    if (app.isPackaged) {
-        const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local');
-        return path.join(localAppData, 'kiraAI-DeskTop');
-    }
-    return path.join(getBackendDir(), 'data');
+    const localAppData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local');
+    return path.join(localAppData, 'kiraAI-DeskTop');
 }
 
 function loadBackendConfig() {
@@ -56,7 +53,7 @@ function sendToLoadingWindow(channel, data) {
     }
 }
 
-function checkBackendHealth(interval = 1000, maxAttempts = 300) {
+function checkBackendHealth(interval = 1000, maxAttempts = 600) {
     return new Promise((resolve, reject) => {
         let attempts = 0;
         let settled = false;
@@ -73,10 +70,6 @@ function checkBackendHealth(interval = 1000, maxAttempts = 300) {
         function check() {
             if (isQuitting) {
                 reject(new Error('Aborted'));
-                return;
-            }
-            if (!backendProcess) {
-                reject(new Error('Backend process exited before becoming healthy'));
                 return;
             }
             attempts++;
@@ -133,6 +126,9 @@ function startBackend() {
             }
         }
 
+        const dataDir = getBackendDataDir();
+        const webuiDir = path.join(backendDir, 'data', 'dist');
+
         if (process.platform === 'win32') {
             const runBatPath = getRunBatPath();
             if (!fs.existsSync(runBatPath)) {
@@ -141,14 +137,16 @@ function startBackend() {
                 reject(error);
                 return;
             }
+
+            const cmd = `chcp 65001 > nul && "${runBatPath}" --data-dir "${dataDir}" --webui-dir "${webuiDir}" --disable-webui-auth`;
             sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runBatPath}`, type: 'info' });
-            console.log(`Starting backend with: ${runBatPath}`);
-            backendProcess = spawn(runBatPath, [], {
+            console.log('Starting backend with: ' + cmd);
+            console.log('  --data-dir=' + dataDir);
+            console.log('  --webui-dir=' + webuiDir);
+            backendProcess = spawn(cmd, [], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
-                detached: false,
                 windowsHide: true,
-                env: process.env,
                 shell: true
             });
         } else {
@@ -161,7 +159,9 @@ function startBackend() {
             }
             sendToLoadingWindow('backend-log', { line: `Starting backend with: ${runShPath}`, type: 'info' });
             console.log(`Starting backend with: ${runShPath}`);
-            backendProcess = spawn('/bin/bash', [runShPath], {
+            console.log(`  --data-dir=${dataDir}`);
+            console.log(`  --webui-dir=${webuiDir}`);
+            backendProcess = spawn('/bin/bash', [runShPath, '--data-dir', dataDir, '--webui-dir', webuiDir, '--disable-webui-auth'], {
                 cwd: backendDir,
                 stdio: ['ignore', 'pipe', 'pipe'],
                 env: process.env

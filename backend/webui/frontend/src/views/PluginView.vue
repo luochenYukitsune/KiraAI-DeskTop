@@ -349,7 +349,7 @@
           :key="item.id"
           mode="store"
           :id="item.id"
-          :name="localize(item, 'name', item.name)"
+          :name="localize(item, 'display_name', item.name)"
           :version="item.version"
           :author="item.author"
           :description="localize(item, 'description', item.description)"
@@ -552,7 +552,7 @@
             </svg>
           </div>
           <div v-else-if="pluginConfigSchema">
-            <ConfigForm v-model="pluginConfigValues" :schema="pluginConfigSchema" />
+            <ConfigForm ref="configFormRef" v-model="pluginConfigValues" :schema="pluginConfigSchema" />
           </div>
           <div v-else class="text-center py-8 text-gray-400">
             {{ $t('plugin.no_config') }}
@@ -642,7 +642,18 @@
       :confirm-text="confirmButtonText"
       @confirm="onConfirmAction"
       @cancel="onCancelAction"
-    />
+    >
+      <div v-if="isUninstallConfirm" class="px-6 pb-2 space-y-2">
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+          <input type="checkbox" v-model="uninstallDeleteConfig" class="rounded border-gray-300 dark:border-gray-600" />
+          {{ t('plugin.delete_config') }}
+        </label>
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+          <input type="checkbox" v-model="uninstallDeleteData" class="rounded border-gray-300 dark:border-gray-600" />
+          {{ t('plugin.delete_data') }}
+        </label>
+      </div>
+    </ConfirmModal>
   </div>
 </template>
 
@@ -692,6 +703,7 @@ const pluginConfigSchema = ref<any>(null)
 const pluginConfigValues = ref<Record<string, any>>({})
 const configPluginId = ref('')
 const configPluginName = ref('')
+const configFormRef = ref<InstanceType<typeof ConfigForm> | null>(null)
 const configLoading = ref(false)
 const savingConfig = ref(false)
 
@@ -718,6 +730,9 @@ const confirmTitle = ref('')
 const confirmMessage = ref('')
 const confirmButtonText = ref('')
 let pendingConfirmAction: (() => void) | null = null
+const isUninstallConfirm = ref(false)
+const uninstallDeleteConfig = ref(false)
+const uninstallDeleteData = ref(false)
 
 function openConfirm(title: string, message: string, buttonText: string, action: () => void) {
   confirmTitle.value = title
@@ -730,10 +745,16 @@ function openConfirm(title: string, message: string, buttonText: string, action:
 function onConfirmAction() {
   pendingConfirmAction?.()
   pendingConfirmAction = null
+  isUninstallConfirm.value = false
+  uninstallDeleteConfig.value = false
+  uninstallDeleteData.value = false
 }
 
 function onCancelAction() {
   pendingConfirmAction = null
+  isUninstallConfirm.value = false
+  uninstallDeleteConfig.value = false
+  uninstallDeleteData.value = false
 }
 
 // Error flags so the UI can distinguish "no data" from "fetch failed"
@@ -781,13 +802,19 @@ async function togglePlugin(plugin: PluginItem) {
 }
 
 function handleDeletePlugin(id: string) {
+  isUninstallConfirm.value = true
+  uninstallDeleteConfig.value = false
+  uninstallDeleteData.value = false
   openConfirm(
     t('plugin.uninstall'),
     t('plugin.uninstall_confirm'),
     t('plugin.uninstall'),
     async () => {
       try {
-        await deletePlugin(id)
+        await deletePlugin(id, {
+          deleteConfig: uninstallDeleteConfig.value,
+          deleteData: uninstallDeleteData.value,
+        })
         notify(t('plugin.uninstall_success'), 'success')
         await loadPlugins()
       } catch {
@@ -823,6 +850,11 @@ async function savePluginConfig() {
   // Posting {} back would wipe any legitimately-managed config for a plugin
   // that has no schema, so refuse to save instead of overwriting.
   if (!pluginConfigSchema.value) return
+  const validateRes = configFormRef.value?.validate()
+  if (validateRes && !validateRes.valid) {
+    notify(validateRes.message!, 'error')
+    return
+  }
   savingConfig.value = true
   try {
     await updatePluginConfig(configPluginId.value, { config: pluginConfigValues.value })
@@ -892,8 +924,9 @@ async function toggleMcp(server: McpServerItem) {
   try {
     await toggleMcpServer(server.id, !server.enabled)
     notify(t('plugin.mcp_toggle_success'), 'success')
-  } catch {
-    notify(t('plugin.mcp_toggle_failed'), 'error')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail
+    notify(detail ? `${t('plugin.mcp_toggle_failed')}: ${detail}` : t('plugin.mcp_toggle_failed'), 'error')
   } finally {
     await loadMcpServers()
   }
@@ -912,23 +945,28 @@ async function openMcpEdit(server: McpServerItem) {
     const res = await getMcpServerConfig(server.id)
     mcpEditMode.value = true
     mcpEditId.value = server.id
-    mcpForm.value = { name: server.name, description: server.description || '' }
+    mcpForm.value = { name: res.data?.name || server.name, description: res.data?.description || server.description || '' }
     mcpConfigJson.value = JSON.stringify(res.data?.config ?? {}, null, 2)
     mcpDialogVisible.value = true
-  } catch {
+  } catch (e: any) {
     // Abort opening the editor — a lossy fallback built from list fields
     // would silently overwrite the real config if the user hits Save. Use
     // the load-specific key so the toast isn't misleading (the user never
     // tried to save anything).
-    notify(t('plugin.mcp_config_load_failed'), 'error')
+    const detail = e?.response?.data?.detail
+    notify(detail ? `${t('plugin.mcp_config_load_failed')}: ${detail}` : t('plugin.mcp_config_load_failed'), 'error')
   }
 }
 
+let mcpSaving = false
+
 async function saveMcpForm() {
+  if (mcpSaving) return
   if (!mcpForm.value.name?.trim()) {
     notify(t('plugin.mcp_name_required'), 'error')
     return
   }
+  mcpSaving = true
   savingMcp.value = true
   let config: any
   try {
@@ -936,6 +974,7 @@ async function saveMcpForm() {
   } catch {
     notify(t('plugin.mcp_invalid_json'), 'error')
     savingMcp.value = false
+    mcpSaving = false
     return
   }
   // Backend expects a JSON object; reject arrays, null, and primitives up
@@ -944,24 +983,24 @@ async function saveMcpForm() {
   if (config === null || typeof config !== 'object' || Array.isArray(config)) {
     notify(t('plugin.mcp_invalid_json'), 'error')
     savingMcp.value = false
+    mcpSaving = false
     return
   }
   try {
     if (mcpEditMode.value && mcpEditId.value) {
-      // Don't send `name` on edit — the backend uses the path param as the
-      // canonical key and silently drops any rename in the body. Submitting
-      // it would falsely advertise a feature that isn't wired up.
-      await updateMcpServerConfig(mcpEditId.value, { description: mcpForm.value.description, config })
+      await updateMcpServerConfig(mcpEditId.value, { name: mcpForm.value.name, description: mcpForm.value.description, config })
     } else {
       await createMcpServer({ name: mcpForm.value.name, description: mcpForm.value.description, config })
     }
     mcpDialogVisible.value = false
     notify(t('plugin.mcp_save_success'), 'success')
     await loadMcpServers()
-  } catch {
-    notify(t('plugin.mcp_save_failed'), 'error')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail
+    notify(detail ? `${t('plugin.mcp_save_failed')}: ${detail}` : t('plugin.mcp_save_failed'), 'error')
   } finally {
     savingMcp.value = false
+    mcpSaving = false
   }
 }
 
@@ -975,8 +1014,9 @@ function handleDeleteMcp(id: string) {
         await deleteMcpServer(id)
         notify(t('plugin.mcp_delete_success'), 'success')
         await loadMcpServers()
-      } catch {
-        notify(t('plugin.mcp_delete_failed'), 'error')
+      } catch (e: any) {
+        const detail = e?.response?.data?.detail
+        notify(detail ? `${t('plugin.mcp_delete_failed')}: ${detail}` : t('plugin.mcp_delete_failed'), 'error')
       }
     }
   )

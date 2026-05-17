@@ -14,6 +14,10 @@ export interface LoginResponse {
   token_type: string
 }
 
+export interface AuthConfigResponse {
+  auth_enabled: boolean
+}
+
 export interface OverviewResponse {
   total_adapters: number
   active_adapters: number
@@ -227,4 +231,20 @@ export interface SchemaField {
   items?: SchemaField
   properties?: Record<string, SchemaField>
   required?: string[]
+}
+
+// Release types
+export interface ReleaseItem {
+  tag_name: string
+  name: string | null
+  body: string | null
+  html_url: string | null
+  published_at: string | null
+  prerelease: boolean
+  draft: boolean
+}
+
+export interface ReleasesResponse {
+  current_version: string
+  releases: ReleaseItem[]
 }
