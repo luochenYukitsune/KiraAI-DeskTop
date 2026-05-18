@@ -1,0 +1,424 @@
+name: Build Desktop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    # PR runs go through check → build → backend-zip (and mark-built on success).
+    # Release publishing is gated on schedule/workflow_dispatch only, so PR builds
+    # validate the workflow without producing a Pre-release.
+  workflow_dispatch:
+    inputs:
+      kiraai_ref:
+        description: 'KiraAI git ref to bundle (branch, tag, or commit SHA)'
+        required: false
+        default: 'main'
+      force:
+        description: 'Build even if upstream KiraAI is unchanged (only relevant on schedule)'
+        type: boolean
+        default: false
+  schedule:
+    # Daily upstream check at 16:00 UTC (00:00 Beijing). Builds only fire when
+    # KiraAI main has a new commit since the last successful build.
+    - cron: '0 16 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check upstream KiraAI
+    runs-on: ubuntu-latest
+    outputs:
+      kiraai_sha: ${{ steps.upstream.outputs.sha }}
+      kiraai_short_sha: ${{ steps.upstream.outputs.short_sha }}
+      kiraai_ref: ${{ steps.upstream.outputs.ref }}
+      build_date: ${{ steps.upstream.outputs.build_date }}
+      release_tag: ${{ steps.upstream.outputs.release_tag }}
+      should_build: ${{ steps.decide.outputs.should_build }}
+    steps:
+      - name: Resolve upstream KiraAI SHA
+        id: upstream
+        shell: bash
+        run: |
+          REF="${{ github.event.inputs.kiraai_ref }}"
+          if [ -z "$REF" ]; then REF="main"; fi
+          SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/heads/$REF" | awk '{print $1}')
+          if [ -z "$SHA" ]; then
+            SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/tags/$REF" | awk '{print $1}')
+          fi
+          if [ -z "$SHA" ]; then
+            # treat REF as a raw commit SHA
+            SHA="$REF"
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          BUILD_DATE=$(date -u +%Y-%m-%d)
+          TAG_DATE=$(date -u +%Y%m%d)
+          echo "ref=$REF"                              >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"                              >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA"                  >> "$GITHUB_OUTPUT"
+          echo "build_date=$BUILD_DATE"                >> "$GITHUB_OUTPUT"
+          echo "release_tag=${TAG_DATE}-${SHORT_SHA}"  >> "$GITHUB_OUTPUT"
+          echo "Upstream KiraAI @ $REF -> $SHA"
+
+      - name: Probe build cache for this SHA
+        id: probe
+        uses: actions/cache/restore@v4
+        with:
+          path: .build-marker
+          key: kiraai-built-${{ steps.upstream.outputs.sha }}
+          lookup-only: true
+
+      - name: Decide whether to build
+        id: decide
+        shell: bash
+        run: |
+          FORCE="${{ github.event.inputs.force }}"
+          CACHE_HIT="${{ steps.probe.outputs.cache-hit }}"
+          EVENT="${{ github.event_name }}"
+          echo "event=$EVENT  cache_hit=$CACHE_HIT  force=$FORCE"
+          if [ "$EVENT" = "schedule" ] && [ "$CACHE_HIT" = "true" ] && [ "$FORCE" != "true" ]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream SHA already built — skipping scheduled run."
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: build:win
+            artifact: kiraAI-DeskTop-windows
+          - os: macos-latest
+            script: build:mac
+            artifact: kiraAI-DeskTop-macos
+          - os: ubuntu-latest
+            script: build:linux
+            artifact: kiraAI-DeskTop-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Electron shell
+        uses: actions/checkout@v4
+
+      - name: Clone KiraAI backend at resolved SHA
+        shell: bash
+        env:
+          KIRAAI_SHA: ${{ needs.check.outputs.kiraai_sha }}
+          KIRAAI_REF: ${{ needs.check.outputs.kiraai_ref }}
+        run: |
+          # Shallow clone, then check out the exact SHA the check job resolved,
+          # so all three matrix legs build identical bits even if upstream moves.
+          git clone --filter=blob:none https://github.com/xxynet/KiraAI.git backend
+          cd backend
+          git checkout --detach "$KIRAAI_SHA"
+          KIRAAI_VER=$(git describe --tags --always 2>/dev/null || echo "$KIRAAI_SHA")
+          echo "KIRAAI_VER=$KIRAAI_VER" >> "$GITHUB_ENV"
+          echo "Cloned KiraAI $KIRAAI_VER ($KIRAAI_SHA) from ref=$KIRAAI_REF"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Build KiraAI WebUI frontend
+        shell: bash
+        working-directory: backend/webui/frontend
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+          npm run build
+
+      - name: Stage frontend dist for runtime
+        shell: bash
+        run: |
+          set -e
+          mkdir -p backend/data/dist
+          if [ -d backend/webui/static/dist ] && [ -n "$(ls -A backend/webui/static/dist 2>/dev/null)" ]; then
+            cp -R backend/webui/static/dist/. backend/data/dist/
+          elif [ -d backend/webui/frontend/dist ] && [ -n "$(ls -A backend/webui/frontend/dist 2>/dev/null)" ]; then
+            cp -R backend/webui/frontend/dist/. backend/data/dist/
+          else
+            echo "ERROR: no frontend build output found under backend/webui/static/dist or backend/webui/frontend/dist"
+            find backend/webui -maxdepth 3 -name dist -type d || true
+            exit 1
+          fi
+          echo "$KIRAAI_VER" > backend/data/dist/.version
+          echo "Staged frontend dist (KiraAI $KIRAAI_VER)"
+
+      - name: Setup Python for icon generation
+        if: matrix.os != 'windows-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate cross-platform icon (mac/linux)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p build
+          # Pillow handles multi-frame ICO correctly across platforms.
+          # setup-python gives us an isolated interpreter so pip install is not
+          # blocked by PEP 668 (externally-managed-environment) on macOS-latest.
+          python -m pip install --quiet Pillow
+          python - <<'PY'
+          from PIL import Image
+          src = 'assets/KD-LOGO.ico'
+          img = Image.open(src)
+          sizes = img.info.get('sizes') or [img.size]
+          print(f'ICO frames in {src}: {sizes}')
+          largest = max(sizes, key=lambda s: s[0] * s[1])
+          img.size = largest
+          img.load()
+          img = img.convert('RGBA').resize((1024, 1024), Image.LANCZOS)
+          out = 'build/icon.png'
+          img.save(out)
+          print(f'Wrote {out} (1024x1024, upscaled from {largest})')
+          PY
+          ls -lh build/icon.png
+
+      - name: Generate dmg background placeholder (mac)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          # electron-builder 24.x with macOS-14+ runners crashes when dmgbuild
+          # tries to create an Alias for its bundled background.tiff. Providing
+          # an explicit (even blank) PNG sidesteps the buggy alias creation.
+          python - <<'PY'
+          from PIL import Image
+          Image.new('RGBA', (540, 380), (26, 26, 46, 255)).save('build/background.png')
+          print('Wrote build/background.png placeholder (540x380)')
+          PY
+          ls -lh build/background.png
+
+      - name: Install Electron shell deps
+        run: npm install
+
+      - name: Compute nightly version
+        shell: bash
+        run: |
+          # KIRAAI_VER comes from the clone step (git describe --tags --always).
+          # Extract leading X.Y.Z (defaulting to 0.0.0) and suffix with the
+          # nightly tag so each build produces a unique, SemVer-compatible
+          # version that electron-builder will accept.
+          BASE=$(echo "$KIRAAI_VER" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          [ -z "$BASE" ] && BASE="0.0.0"
+          NIGHTLY_VERSION="${BASE}-nightly.${{ needs.check.outputs.release_tag }}"
+          echo "NIGHTLY_VERSION=$NIGHTLY_VERSION" >> "$GITHUB_ENV"
+          echo "Nightly version: $NIGHTLY_VERSION"
+
+      - name: Run electron-builder
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run ${{ matrix.script }} -- --config.extraMetadata.version="$NIGHTLY_VERSION"
+
+      - name: List build output
+        shell: bash
+        run: ls -lah dist || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.blockmap
+            dist/latest*.yml
+          if-no-files-found: error
+          retention-days: 90
+
+  backend-zip:
+    name: Package Python backend (source zip)
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone KiraAI backend at resolved SHA
+        shell: bash
+        env:
+          KIRAAI_SHA: ${{ needs.check.outputs.kiraai_sha }}
+          KIRAAI_REF: ${{ needs.check.outputs.kiraai_ref }}
+        run: |
+          git clone --filter=blob:none https://github.com/xxynet/KiraAI.git backend
+          cd backend
+          git checkout --detach "$KIRAAI_SHA"
+          KIRAAI_VER=$(git describe --tags --always 2>/dev/null || echo "$KIRAAI_SHA")
+          echo "KIRAAI_VER=$KIRAAI_VER" >> "$GITHUB_ENV"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/webui/frontend/package-lock.json
+
+      - name: Build KiraAI WebUI frontend
+        shell: bash
+        working-directory: backend/webui/frontend
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+          npm run build
+
+      - name: Stage frontend dist
+        shell: bash
+        run: |
+          set -e
+          mkdir -p backend/data/dist
+          if [ -d backend/webui/static/dist ] && [ -n "$(ls -A backend/webui/static/dist 2>/dev/null)" ]; then
+            cp -R backend/webui/static/dist/. backend/data/dist/
+          elif [ -d backend/webui/frontend/dist ] && [ -n "$(ls -A backend/webui/frontend/dist 2>/dev/null)" ]; then
+            cp -R backend/webui/frontend/dist/. backend/data/dist/
+          else
+            echo "ERROR: no frontend build output found"
+            exit 1
+          fi
+          echo "$KIRAAI_VER" > backend/data/dist/.version
+
+      - name: Strip dev / git metadata
+        shell: bash
+        run: |
+          rm -rf backend/.git \
+                 backend/webui/frontend/node_modules \
+                 backend/webui/frontend/.vite \
+                 backend/.github \
+                 backend/screenshots \
+                 backend/docs \
+                 backend/Dockerfile \
+                 backend/docker-compose.yml \
+                 backend/.dockerignore || true
+          find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find backend -type f -name '*.pyc' -delete 2>/dev/null || true
+
+      - name: Create zip
+        id: zip
+        shell: bash
+        run: |
+          ZIP_NAME="kiraAI-backend-${{ needs.check.outputs.release_tag }}.zip"
+          # zip backend/ into <ZIP_NAME>; top-level entry inside zip will be "backend/"
+          zip -rq "$ZIP_NAME" backend
+          ls -lh "$ZIP_NAME"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload backend zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiraAI-DeskTop-backend
+          path: ${{ steps.zip.outputs.zip_name }}
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: Publish Nightly Pre-release
+    needs: [check, build, backend-zip]
+    if: >
+      success() &&
+      needs.check.outputs.should_build == 'true' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f \( \
+            -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
+            -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \
+          \) -exec cp {} release/ \;
+          ls -lah release
+
+      - name: Compose release body
+        id: body
+        shell: bash
+        env:
+          KIRAAI_SHA: ${{ needs.check.outputs.kiraai_sha }}
+          KIRAAI_SHORT: ${{ needs.check.outputs.kiraai_short_sha }}
+          BUILD_DATE: ${{ needs.check.outputs.build_date }}
+          RELEASE_TAG: ${{ needs.check.outputs.release_tag }}
+        run: |
+          cat > release-body.md <<EOF
+          # Nightly Build ${BUILD_DATE} (${RELEASE_TAG})
+
+          > ⚠️ This is an **unsigned** nightly build for testing purposes.
+          >
+          > 🍎 **macOS users**: If you see *"kiraAI-DeskTop is damaged and can't be opened"*, run this in Terminal:
+          > \`\`\`
+          > xattr -cr /Applications/kiraAI-DeskTop.app
+          > \`\`\`
+
+          **KiraAI backend commit:** [\`${KIRAAI_SHORT}\`](https://github.com/xxynet/KiraAI/commit/${KIRAAI_SHA})
+
+          ## Desktop App (Electron + Python backend)
+
+          | Platform | File |
+          | --- | --- |
+          | Windows x64 | \`kiraAI-DeskTop Setup *.exe\` (NSIS installer) |
+          | macOS Intel | \`kiraAI-DeskTop-*.dmg\` |
+          | macOS Apple Silicon | \`kiraAI-DeskTop-*-arm64.dmg\` |
+          | Linux x64 | \`*.AppImage\` / \`*.deb\` |
+
+          The desktop app requires **Python 3.10+** on PATH at first run — it will create a venv and install dependencies automatically.
+
+          ## Python Backend Only (no Electron)
+
+          | Platform | File |
+          | --- | --- |
+          | All (cross-platform) | \`kiraAI-backend-${RELEASE_TAG}.zip\` |
+
+          Unzip and run \`backend/scripts/run.sh\` (mac/linux) or \`backend/scripts/run.bat\` (Windows).
+          EOF
+          echo "--- release body ---"
+          cat release-body.md
+
+      - name: Create / update Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check.outputs.release_tag }}
+          name: Nightly Build ${{ needs.check.outputs.build_date }}
+          body_path: release-body.md
+          prerelease: true
+          files: release/*
+
+  mark-built:
+    name: Mark SHA built (cache)
+    needs: [check, build, backend-zip]
+    if: success() && needs.check.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write marker
+        shell: bash
+        run: |
+          mkdir -p .build-marker
+          echo "${{ needs.check.outputs.kiraai_sha }}" > .build-marker/sha.txt
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .build-marker/built_at.txt
+          cat .build-marker/sha.txt
+      - name: Save build marker to cache
+        uses: actions/cache/save@v4
+        with:
+          path: .build-marker
+          key: kiraai-built-${{ needs.check.outputs.kiraai_sha }}

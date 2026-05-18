@@ -5,15 +5,9 @@ node_modules/
 dist/
 ../KiraAI-Dist/
 
-# Backend (managed by backend/.gitignore)
-backend/venv/
-backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/**/*.pyc
-backend/data/
-backend/.env
-backend/.env.*
+# KiraAI backend source — cloned by CI from https://github.com/xxynet/KiraAI at build time.
+# Never committed to this repo; this directory is purely a build-time staging area.
+backend/
 
 # OS
 Thumbs.db
@@ -26,10 +20,9 @@ Thumbs.db
 # Logs
 *.log
 
-# Backend frontend build artifacts
-backend/webui/frontend/node_modules/
-backend/webui/frontend/.vite/
-backend/webui/frontend/dist/
-
 # Electron builder cache
 *.blockmap
+
+# Generated icon resources (produced by CI from assets/KD-LOGO.ico)
+build/icon.png
+build/icon.icns
