@@ -395,14 +395,28 @@ jobs:
           echo "--- release body ---"
           cat release-body.md
 
-      - name: Create / update Pre-release
+      - name: Delete previous rolling nightly release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Rolling nightly: tag is fixed as "nightly". Delete the existing
+          # release (and its tag) so we don't accumulate stale assets — asset
+          # filenames change every build because they embed the nightly version
+          # string, so a plain upload would keep old files around forever.
+          gh release delete nightly \
+            --yes --cleanup-tag \
+            --repo "${{ github.repository }}" 2>/dev/null || true
+
+      - name: Create rolling nightly Pre-release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check.outputs.release_tag }}
+          tag_name: nightly
           name: Nightly Build ${{ needs.check.outputs.build_date }}
           body_path: release-body.md
           prerelease: true
           files: release/*
+          make_latest: 'false'
 
   mark-built:
     name: Mark SHA built (cache)

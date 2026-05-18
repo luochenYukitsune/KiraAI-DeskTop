@@ -75,10 +75,11 @@ CI 由 [.github/workflows/build.yml](.github/workflows/build.yml) 定义，三�
 ## Release 发布
 
 - **schedule 检测到上游有更新** 或 **手动 `workflow_dispatch`** 触发的构建，会自动发布为 GitHub **Pre-release（Nightly）**：
-  - tag：`YYYYMMDD-<shortsha>`（基于 KiraAI 上游 commit 的短 SHA）
-  - 标题：`Nightly Build YYYY-MM-DD`
-  - 标记 `prerelease: true`
-  - body 含 unsigned 提示 + macOS `xattr -cr` 解决"damaged"提示 + 产物对照表
+  - tag：固定 `nightly`（滚动 tag，每次发布前先删旧 release + tag 再重建，避免 assets 堆积）
+  - 标题：`Nightly Build YYYY-MM-DD`（每次刷新成当次构建日期）
+  - 标记 `prerelease: true`，不抢 Latest
+  - 产物文件名包含 `<X.Y.Z>-nightly.<YYYYMMDD>-<shortsha>`，从文件名能看出具体版本
+  - body 含 unsigned 提示 + macOS `xattr -cr` 解决"damaged"提示 + 产物对照表 + KiraAI commit 链接
 - **push 到本仓库 main** 触发的构建只产 artifacts，不发 Release（外壳代码改动不算 KiraAI 版本变化）
 
 构建产物也都会上传到 workflow artifacts（保留 90 天），按平台分组：`kiraAI-DeskTop-windows` / `kiraAI-DeskTop-macos` / `kiraAI-DeskTop-linux` / `kiraAI-DeskTop-backend`。
