@@ -161,23 +161,23 @@ jobs:
         shell: bash
         run: |
           mkdir -p build
-          # ImageMagick is not preinstalled on current GH runners; install if missing.
-          # Tolerate both v7 (`magick`) and v6 (`convert`).
-          if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
-            if [ "$RUNNER_OS" = "Linux" ]; then
-              sudo apt-get update -qq
-              sudo apt-get install -y --no-install-recommends imagemagick
-            elif [ "$RUNNER_OS" = "macOS" ]; then
-              brew install imagemagick
-            fi
-          fi
-          if command -v magick >/dev/null 2>&1; then
-            MAGICK_BIN=magick
-          else
-            MAGICK_BIN=convert
-          fi
-          echo "Using $MAGICK_BIN"
-          "$MAGICK_BIN" "assets/KD-LOGO.ico" -coalesce -resize 1024x1024 build/icon.png
+          # Use Pillow — handles multi-frame ICO correctly across platforms.
+          # (ImageMagick v6 on Ubuntu silently fails on ICO due to policy.xml.)
+          python3 -m pip install --quiet --user Pillow
+          python3 - <<'PY'
+          from PIL import Image
+          src = 'assets/KD-LOGO.ico'
+          img = Image.open(src)
+          sizes = img.info.get('sizes') or [img.size]
+          print(f'ICO frames in {src}: {sizes}')
+          largest = max(sizes, key=lambda s: s[0] * s[1])
+          img.size = largest
+          img.load()
+          img = img.convert('RGBA').resize((1024, 1024), Image.LANCZOS)
+          out = 'build/icon.png'
+          img.save(out)
+          print(f'Wrote {out} (1024x1024, upscaled from {largest})')
+          PY
           ls -lh build/icon.png
 
       - name: Install Electron shell deps
