@@ -204,12 +204,25 @@ jobs:
       - name: Install Electron shell deps
         run: npm install
 
+      - name: Compute nightly version
+        shell: bash
+        run: |
+          # KIRAAI_VER comes from the clone step (git describe --tags --always).
+          # Extract leading X.Y.Z (defaulting to 0.0.0) and suffix with the
+          # nightly tag so each build produces a unique, SemVer-compatible
+          # version that electron-builder will accept.
+          BASE=$(echo "$KIRAAI_VER" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          [ -z "$BASE" ] && BASE="0.0.0"
+          NIGHTLY_VERSION="${BASE}-nightly.${{ needs.check.outputs.release_tag }}"
+          echo "NIGHTLY_VERSION=$NIGHTLY_VERSION" >> "$GITHUB_ENV"
+          echo "Nightly version: $NIGHTLY_VERSION"
+
       - name: Run electron-builder
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run ${{ matrix.script }}
+        run: npm run ${{ matrix.script }} -- --config.extraMetadata.version="$NIGHTLY_VERSION"
 
       - name: List build output
         shell: bash
