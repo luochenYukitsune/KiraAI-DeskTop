@@ -3,6 +3,11 @@ name: Build Desktop
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    # PR runs go through check → build → backend-zip (and mark-built on success).
+    # Release publishing is gated on schedule/workflow_dispatch only, so PR builds
+    # validate the workflow without producing a Pre-release.
   workflow_dispatch:
     inputs:
       kiraai_ref:
