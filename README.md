@@ -21,7 +21,7 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 ├── main.js              # Electron 主进程：拉起 Python 后端 + 健康检查 + 加载窗口
 ├── preload.js           # Electron preload
 ├── loading.html         # 启动加载页
-├── assets/KD-LOGO.ico   # Windows 图标（mac 由 CI 用 Pillow 转换生成）
+├── assets/KD-LOGO.ico   # Windows 图标（mac/linux 由 CI 转换生成）
 ├── build/installer.nsh  # NSIS 自定义安装脚本
 ├── package.json         # electron-builder 配置（三平台 target）
 └── .github/workflows/
@@ -34,6 +34,7 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 
 - **Windows 10/11 (x64)** — 需要 Python 3.10+ 在 PATH
 - **macOS 12+（Intel / Apple Silicon）** — 需要 `python3` 在 PATH
+- **Linux (x64)** — 需要 `python3` 在 PATH
 
 首次启动时桌面应用会在用户数据目录下创建 Python 虚拟环境并安装 `requirements.txt`。
 
@@ -45,6 +46,7 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 |------|------|
 | Windows x64 | `kiraAI-DeskTop Setup <version>.exe` (NSIS) |
 | macOS Intel / Apple Silicon | `kiraAI-DeskTop-<version>.dmg` / `-arm64.dmg` |
+| Linux x64 | `*.AppImage` / `*.deb` |
 
 **Python Backend Only（跨平台一份）：**
 
@@ -52,7 +54,7 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 |------|------|
 | KiraAI source + 预构建前端 dist | `kiraAI-backend-<YYYYMMDD>-<shortsha>.zip` |
 
-解压后用 `backend/scripts/run.sh`（mac）或 `backend/scripts/run.bat`（Windows）启动 —— 仅需要用户机器上有 Python 3.10+。
+解压后用 `backend/scripts/run.sh`（mac/linux）或 `backend/scripts/run.bat`（Windows）启动 —— 仅需要用户机器上有 Python 3.10+。
 
 ## 触发构建
 
@@ -79,7 +81,7 @@ CI 由 [.github/workflows/build.yml](.github/workflows/build.yml) 定义，三�
   - body 含 unsigned 提示 + macOS `xattr -cr` 解决"damaged"提示 + 产物对照表
 - **push 到本仓库 main** 触发的构建只产 artifacts，不发 Release（外壳代码改动不算 KiraAI 版本变化）
 
-构建产物也都会上传到 workflow artifacts（保留 90 天），按平台分组：`kiraAI-DeskTop-windows` / `kiraAI-DeskTop-macos` / `kiraAI-DeskTop-backend`。
+构建产物也都会上传到 workflow artifacts（保留 90 天），按平台分组：`kiraAI-DeskTop-windows` / `kiraAI-DeskTop-macos` / `kiraAI-DeskTop-linux` / `kiraAI-DeskTop-backend`。
 
 ## 本地开发
 
@@ -103,7 +105,7 @@ cp -R backend/webui/static/dist/. backend/data/dist/   # 或 backend/webui/front
 
 # 3. 出包（按当前平台）
 npm install
-npm run build:win    # 或 build:mac
+npm run build:win    # 或 build:mac / build:linux
 ```
 
 产物在 `dist/`。
@@ -113,11 +115,11 @@ npm run build:win    # 或 build:mac
 - 主进程逻辑：[main.js](main.js)
 - 加载页样式 / 文案：[loading.html](loading.html)
 - Windows 安装器：[build/installer.nsh](build/installer.nsh)、`package.json` 的 `build.nsis` 段
-- mac target 配置：`package.json` 的 `build.mac` 段
+- mac/linux target 配置：`package.json` 的 `build.mac` / `build.linux` 段
 
 ## 图标说明
 
-当前 `assets/KD-LOGO.ico` 是 Windows 图标（最大 24×24）。mac 包由 CI 用 Pillow 从 .ico 选最大帧升采样到 1024×1024 生成，**清晰度有限**。建议补一张高分辨率源图（例如 1024×1024 PNG），放到 `build/icon.png` 并在 `.gitignore` 中放出（去掉对应那行），CI 就会优先用它。
+当前 `assets/KD-LOGO.ico` 是 Windows 图标（最大 24×24）。mac/linux 包由 CI 用 ImageMagick 从 .ico 升采样到 1024×1024 生成，**清晰度有限**。建议补一张高分辨率源图（例如 1024×1024 PNG），放到 `build/icon.png` 并在 `.gitignore` 中放出（去掉对应那行），CI 就会优先用它。
 
 ## 友情链接
 
