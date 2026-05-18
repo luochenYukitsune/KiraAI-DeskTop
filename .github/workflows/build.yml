@@ -161,8 +161,23 @@ jobs:
         shell: bash
         run: |
           mkdir -p build
-          # ImageMagick v7 (`magick`) is preinstalled on macOS and Ubuntu runners.
-          magick "assets/KD-LOGO.ico" -coalesce -resize 1024x1024 build/icon.png
+          # ImageMagick is not preinstalled on current GH runners; install if missing.
+          # Tolerate both v7 (`magick`) and v6 (`convert`).
+          if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
+            if [ "$RUNNER_OS" = "Linux" ]; then
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends imagemagick
+            elif [ "$RUNNER_OS" = "macOS" ]; then
+              brew install imagemagick
+            fi
+          fi
+          if command -v magick >/dev/null 2>&1; then
+            MAGICK_BIN=magick
+          else
+            MAGICK_BIN=convert
+          fi
+          echo "Using $MAGICK_BIN"
+          "$MAGICK_BIN" "assets/KD-LOGO.ico" -coalesce -resize 1024x1024 build/icon.png
           ls -lh build/icon.png
 
       - name: Install Electron shell deps
