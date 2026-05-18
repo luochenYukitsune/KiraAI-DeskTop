@@ -99,9 +99,6 @@ jobs:
           - os: macos-latest
             script: build:mac
             artifact: kiraAI-DeskTop-macos
-          - os: ubuntu-latest
-            script: build:linux
-            artifact: kiraAI-DeskTop-linux
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Electron shell
@@ -157,19 +154,18 @@ jobs:
           echo "Staged frontend dist (KiraAI $KIRAAI_VER)"
 
       - name: Setup Python for icon generation
-        if: matrix.os != 'windows-latest'
+        if: matrix.os == 'macos-latest'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Generate cross-platform icon (mac/linux)
-        if: matrix.os != 'windows-latest'
+      - name: Generate icon (mac)
+        if: matrix.os == 'macos-latest'
         shell: bash
         run: |
           mkdir -p build
-          # Pillow handles multi-frame ICO correctly across platforms.
-          # setup-python gives us an isolated interpreter so pip install is not
-          # blocked by PEP 668 (externally-managed-environment) on macOS-latest.
+          # Pillow handles multi-frame ICO correctly. setup-python gives an
+          # isolated interpreter, sidestepping PEP 668 on macOS-latest.
           python -m pip install --quiet Pillow
           python - <<'PY'
           from PIL import Image
@@ -208,8 +204,6 @@ jobs:
           path: |
             dist/*.exe
             dist/*.dmg
-            dist/*.AppImage
-            dist/*.deb
             dist/*.blockmap
             dist/latest*.yml
           if-no-files-found: error
@@ -320,7 +314,7 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f \( \
-            -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
+            -name '*.exe' -o -name '*.dmg' \
             -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \
           \) -exec cp {} release/ \;
           ls -lah release
@@ -353,7 +347,6 @@ jobs:
           | Windows x64 | \`kiraAI-DeskTop Setup *.exe\` (NSIS installer) |
           | macOS Intel | \`kiraAI-DeskTop-*.dmg\` |
           | macOS Apple Silicon | \`kiraAI-DeskTop-*-arm64.dmg\` |
-          | Linux x64 | \`*.AppImage\` / \`*.deb\` |
 
           The desktop app requires **Python 3.10+** on PATH at first run — it will create a venv and install dependencies automatically.
 
@@ -363,7 +356,7 @@ jobs:
           | --- | --- |
           | All (cross-platform) | \`kiraAI-backend-${RELEASE_TAG}.zip\` |
 
-          Unzip and run \`backend/scripts/run.sh\` (mac/linux) or \`backend/scripts/run.bat\` (Windows).
+          Unzip and run \`backend/scripts/run.sh\` (mac) or \`backend/scripts/run.bat\` (Windows).
           EOF
           echo "--- release body ---"
           cat release-body.md
