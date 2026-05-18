@@ -11,16 +11,16 @@ on:
   workflow_dispatch:
     inputs:
       kiraai_ref:
-        description: 'KiraAI git ref to bundle (branch, tag, or commit SHA)'
+        description: 'KiraAI git ref (leave empty for latest stable release; or fill a tag / branch / commit SHA)'
         required: false
-        default: 'main'
+        default: ''
       force:
-        description: 'Build even if upstream KiraAI is unchanged (only relevant on schedule)'
+        description: 'Build even if this KiraAI release was already built (only relevant on schedule)'
         type: boolean
         default: false
   schedule:
-    # Daily upstream check at 16:00 UTC (00:00 Beijing). Builds only fire when
-    # KiraAI main has a new commit since the last successful build.
+    # Daily check for new KiraAI stable releases at 16:00 UTC (00:00 Beijing).
+    # Builds only fire when there is a release we have not built yet.
     - cron: '0 16 * * *'
 
 permissions:
@@ -38,18 +38,30 @@ jobs:
       release_tag: ${{ steps.upstream.outputs.release_tag }}
       should_build: ${{ steps.decide.outputs.should_build }}
     steps:
-      - name: Resolve upstream KiraAI SHA
+      - name: Resolve upstream KiraAI release/SHA
         id: upstream
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REF="${{ github.event.inputs.kiraai_ref }}"
-          if [ -z "$REF" ]; then REF="main"; fi
-          SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/heads/$REF" | awk '{print $1}')
+          if [ -z "$REF" ]; then
+            # Default: track latest stable (non-prerelease, non-draft) release.
+            REF=$(gh api repos/xxynet/KiraAI/releases/latest --jq .tag_name 2>/dev/null || true)
+            if [ -z "$REF" ]; then
+              echo "Failed to fetch latest KiraAI release via gh api — aborting."
+              exit 1
+            fi
+            echo "Latest KiraAI stable release: $REF"
+          else
+            echo "Using user-provided ref: $REF"
+          fi
+          # Resolve REF (tag → branch → raw SHA) to a concrete 40-char SHA.
+          SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/tags/$REF" | awk '{print $1}')
           if [ -z "$SHA" ]; then
-            SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/tags/$REF" | awk '{print $1}')
+            SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/heads/$REF" | awk '{print $1}')
           fi
           if [ -z "$SHA" ]; then
-            # treat REF as a raw commit SHA
             SHA="$REF"
           fi
           SHORT_SHA="${SHA:0:7}"
@@ -60,7 +72,7 @@ jobs:
           echo "short_sha=$SHORT_SHA"                  >> "$GITHUB_OUTPUT"
           echo "build_date=$BUILD_DATE"                >> "$GITHUB_OUTPUT"
           echo "release_tag=${TAG_DATE}-${SHORT_SHA}"  >> "$GITHUB_OUTPUT"
-          echo "Upstream KiraAI @ $REF -> $SHA"
+          echo "Tracking KiraAI @ $REF -> $SHA"
 
       - name: Probe build cache for this SHA
         id: probe
@@ -80,7 +92,7 @@ jobs:
           echo "event=$EVENT  cache_hit=$CACHE_HIT  force=$FORCE"
           if [ "$EVENT" = "schedule" ] && [ "$CACHE_HIT" = "true" ] && [ "$FORCE" != "true" ]; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
-            echo "Upstream SHA already built — skipping scheduled run."
+            echo "KiraAI release already built — skipping scheduled run."
           else
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           fi
@@ -356,22 +368,23 @@ jobs:
         id: body
         shell: bash
         env:
+          KIRAAI_REF: ${{ needs.check.outputs.kiraai_ref }}
           KIRAAI_SHA: ${{ needs.check.outputs.kiraai_sha }}
           KIRAAI_SHORT: ${{ needs.check.outputs.kiraai_short_sha }}
           BUILD_DATE: ${{ needs.check.outputs.build_date }}
           RELEASE_TAG: ${{ needs.check.outputs.release_tag }}
         run: |
           cat > release-body.md <<EOF
-          # Nightly Build ${BUILD_DATE} (${RELEASE_TAG})
+          # KiraAI ${KIRAAI_REF} — Desktop Build ${BUILD_DATE}
 
-          > ⚠️ This is an **unsigned** nightly build for testing purposes.
+          > ⚠️ This is an **unsigned** build for testing purposes.
           >
           > 🍎 **macOS users**: If you see *"kiraAI-DeskTop is damaged and can't be opened"*, run this in Terminal:
           > \`\`\`
           > xattr -cr /Applications/kiraAI-DeskTop.app
           > \`\`\`
 
-          **KiraAI backend commit:** [\`${KIRAAI_SHORT}\`](https://github.com/xxynet/KiraAI/commit/${KIRAAI_SHA})
+          **Tracking KiraAI:** [\`${KIRAAI_REF}\`](https://github.com/xxynet/KiraAI/releases/tag/${KIRAAI_REF}) (commit [\`${KIRAAI_SHORT}\`](https://github.com/xxynet/KiraAI/commit/${KIRAAI_SHA}))
 
           ## Desktop App (Electron + Python backend)
 
@@ -412,7 +425,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
-          name: Nightly Build ${{ needs.check.outputs.build_date }}
+          name: KiraAI ${{ needs.check.outputs.kiraai_ref }} (built ${{ needs.check.outputs.build_date }})
           body_path: release-body.md
           prerelease: true
           files: release/*

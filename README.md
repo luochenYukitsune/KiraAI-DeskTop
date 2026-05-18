@@ -12,7 +12,7 @@
 
 ## 项目简介
 
-kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌面客户端。**本仓库只保留 Electron 外壳**（启动器、加载页面、安装器配置），KiraAI 后端源码在 CI 构建时从 `xxynet/KiraAI` 仓库的 `main` 分支克隆并打入安装包，因此每次发版自动跟随 KiraAI 主仓库的最新代码。
+kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌面客户端。**本仓库只保留 Electron 外壳**（启动器、加载页面、安装器配置），KiraAI 后端源码在 CI 构建时从 `xxynet/KiraAI` 仓库**最新的正式 release** 克隆并打入安装包，因此每次发版自动跟随 KiraAI 上游的稳定版本。
 
 ## 仓库结构
 
@@ -25,7 +25,7 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 ├── build/installer.nsh  # NSIS 自定义安装脚本
 ├── package.json         # electron-builder 配置（三平台 target）
 └── .github/workflows/
-    └── build.yml        # CI：clone KiraAI main → 构建前端 → 三平台打包
+    └── build.yml        # CI：clone KiraAI latest release → 构建前端 → 三平台打包
 ```
 
 构建时 CI 会在仓库根目录创建 `backend/`，内容是 KiraAI 源码 + 前端构建产物。该目录被 `.gitignore` 排除，永远不会进入提交。
@@ -61,25 +61,25 @@ kiraAI-DeskTop 是 [KiraAI](https://github.com/xxynet/KiraAI) 的 Electron 桌�
 CI 由 [.github/workflows/build.yml](.github/workflows/build.yml) 定义，三种触发方式：
 
 - **手动触发** — Actions 页面点 `Run workflow`：
-  - `kiraai_ref`（默认 `main`，也可填 tag / commit SHA）
+  - `kiraai_ref`（**留空表示 latest 正式 release**；也可填具体 tag / 分支 / commit SHA 来构建任意版本）
   - `force`（默认 `false`，仅对 schedule 触发的"已构建过"场景生效）
 - **push 到本仓库 `main`** — 外壳代码改动时自动出三平台包
-- **每日定时检测上游** — 每天 UTC 16:00（北京 00:00）运行一个轻量 `check` job：
-  - 用 `git ls-remote` 拿 KiraAI `main` 的最新 commit SHA
-  - 查 Actions cache 里 key `kiraai-built-<SHA>` 是否存在
+- **每日定时检测 KiraAI release** — 每天 UTC 16:00（北京 00:00）运行一个轻量 `check` job：
+  - 用 `gh api repos/xxynet/KiraAI/releases/latest` 拿最新正式 release 的 tag
+  - 解析 tag → commit SHA，查 Actions cache 里 key `kiraai-built-<SHA>` 是否存在
   - **不存在** → 触发三平台构建，成功后写入 marker
   - **已存在** → 跳过，不消耗矩阵构建的 CI 分钟
 
-也就是说定时任务只在上游真的有新 commit 时才出包，避免无意义的 nightly。需要强制重建已构建过的 SHA 时，用 manual dispatch 勾上 `force`。
+也就是说定时任务只在 KiraAI 出了我们没构建过的 release 时才出包，main 分支的开发 commit **不**触发自动构建。需要测某个 main commit 或 prerelease，用 manual dispatch 填具体 `kiraai_ref`。
 
 ## Release 发布
 
-- **schedule 检测到上游有更新** 或 **手动 `workflow_dispatch`** 触发的构建，会自动发布为 GitHub **Pre-release（Nightly）**：
+- **schedule 检测到 KiraAI 有新 release** 或 **手动 `workflow_dispatch`** 触发的构建，会自动发布为 GitHub **Pre-release**：
   - tag：固定 `nightly`（滚动 tag，每次发布前先删旧 release + tag 再重建，避免 assets 堆积）
-  - 标题：`Nightly Build YYYY-MM-DD`（每次刷新成当次构建日期）
+  - 标题：`KiraAI <release-tag> (built YYYY-MM-DD)`，每次发布刷新成最新 KiraAI 版本
   - 标记 `prerelease: true`，不抢 Latest
-  - 产物文件名包含 `<X.Y.Z>-nightly.<YYYYMMDD>-<shortsha>`，从文件名能看出具体版本
-  - body 含 unsigned 提示 + macOS `xattr -cr` 解决"damaged"提示 + 产物对照表 + KiraAI commit 链接
+  - 产物文件名包含 `<X.Y.Z>-nightly.<YYYYMMDD>-<shortsha>`，从文件名能看出对应 KiraAI 版本和构建日期
+  - body 含 unsigned 提示 + macOS `xattr -cr` 解决"damaged"提示 + 产物对照表 + KiraAI release 链接
 - **push 到本仓库 main** 触发的构建只产 artifacts，不发 Release（外壳代码改动不算 KiraAI 版本变化）
 
 构建产物也都会上传到 workflow artifacts（保留 90 天），按平台分组：`kiraAI-DeskTop-windows` / `kiraAI-DeskTop-macos` / `kiraAI-DeskTop-linux` / `kiraAI-DeskTop-backend`。
