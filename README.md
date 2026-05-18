@@ -64,7 +64,7 @@ CI 由 [.github/workflows/build.yml](.github/workflows/build.yml) 定义，三�
   - `kiraai_ref`（**留空表示 latest 正式 release**；也可填具体 tag / 分支 / commit SHA 来构建任意版本）
   - `force`（默认 `false`，仅对 schedule 触发的"已构建过"场景生效）
 - **push 到本仓库 `main`** — 外壳代码改动时自动出三平台包
-- **每日定时检测 KiraAI release** — 每天 UTC 16:00（北京 00:00）运行一个轻量 `check` job：
+- **每 4 小时定时检测 KiraAI release** — UTC 0/4/8/12/16/20（北京 8/12/16/20/0/4）各运行一次轻量 `check` job：
   - 用 `gh api repos/xxynet/KiraAI/releases/latest` 拿最新正式 release 的 tag
   - 解析 tag → commit SHA，查 Actions cache 里 key `kiraai-built-<SHA>` 是否存在
   - **不存在** → 触发三平台构建，成功后写入 marker

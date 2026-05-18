@@ -19,9 +19,10 @@ on:
         type: boolean
         default: false
   schedule:
-    # Daily check for new KiraAI stable releases at 16:00 UTC (00:00 Beijing).
-    # Builds only fire when there is a release we have not built yet.
-    - cron: '0 16 * * *'
+    # Check for new KiraAI stable releases every 4 hours (UTC 0/4/8/12/16/20 =
+    # Beijing 8/12/16/20/0/4). Builds only fire when there is a release we
+    # have not built yet, so most ticks are no-ops.
+    - cron: '0 */4 * * *'
 
 permissions:
   contents: read
