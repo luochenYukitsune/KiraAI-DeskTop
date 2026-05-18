@@ -3,7 +3,10 @@
     "version": "2.16.1",
     "description": "KiraAI Desktop Application (Electron shell)",
     "main": "main.js",
-    "author": "KiraAI Team",
+    "author": {
+        "name": "KiraAI Team",
+        "email": "noreply@kiraai.local"
+    },
     "license": "AGPL-3.0",
     "scripts": {
         "start": "electron .",

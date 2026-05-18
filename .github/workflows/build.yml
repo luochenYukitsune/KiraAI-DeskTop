@@ -156,15 +156,22 @@ jobs:
           echo "$KIRAAI_VER" > backend/data/dist/.version
           echo "Staged frontend dist (KiraAI $KIRAAI_VER)"
 
+      - name: Setup Python for icon generation
+        if: matrix.os != 'windows-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Generate cross-platform icon (mac/linux)
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           mkdir -p build
-          # Use Pillow — handles multi-frame ICO correctly across platforms.
-          # (ImageMagick v6 on Ubuntu silently fails on ICO due to policy.xml.)
-          python3 -m pip install --quiet --user Pillow
-          python3 - <<'PY'
+          # Pillow handles multi-frame ICO correctly across platforms.
+          # setup-python gives us an isolated interpreter so pip install is not
+          # blocked by PEP 668 (externally-managed-environment) on macOS-latest.
+          python -m pip install --quiet Pillow
+          python - <<'PY'
           from PIL import Image
           src = 'assets/KD-LOGO.ico'
           img = Image.open(src)
