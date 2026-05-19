@@ -5,13 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    # PR runs go through check → build → backend-zip (and mark-built on success).
+    # PR runs go through check → build (and mark-built on success).
     # Release publishing is gated on schedule/workflow_dispatch only, so PR builds
-    # validate the workflow without producing a Pre-release.
+    # validate the workflow without producing a public release.
   workflow_dispatch:
     inputs:
       kiraai_ref:
-        description: 'KiraAI git ref (leave empty for latest stable release; or fill a tag / branch / commit SHA)'
+        description: 'KiraAI git ref (leave empty for latest release incl. pre-release; or fill a tag / branch / commit SHA)'
         required: false
         default: ''
       force:
@@ -19,9 +19,9 @@ on:
         type: boolean
         default: false
   schedule:
-    # Check for new KiraAI stable releases every 4 hours (UTC 0/4/8/12/16/20 =
-    # Beijing 8/12/16/20/0/4). Builds only fire when there is a release we
-    # have not built yet, so most ticks are no-ops.
+    # Check for new KiraAI releases (stable OR pre-release) every 4 hours
+    # (UTC 0/4/8/12/16/20 = Beijing 8/12/16/20/0/4). Builds only fire when
+    # there is a release we have not built yet, so most ticks are no-ops.
     - cron: '0 */4 * * *'
 
 permissions:
@@ -35,6 +35,7 @@ jobs:
       kiraai_sha: ${{ steps.upstream.outputs.sha }}
       kiraai_short_sha: ${{ steps.upstream.outputs.short_sha }}
       kiraai_ref: ${{ steps.upstream.outputs.ref }}
+      kiraai_prerelease: ${{ steps.upstream.outputs.prerelease }}
       build_date: ${{ steps.upstream.outputs.build_date }}
       release_tag: ${{ steps.upstream.outputs.release_tag }}
       should_build: ${{ steps.decide.outputs.should_build }}
@@ -46,16 +47,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REF="${{ github.event.inputs.kiraai_ref }}"
+          PRERELEASE="false"
           if [ -z "$REF" ]; then
-            # Default: track latest stable (non-prerelease, non-draft) release.
-            REF=$(gh api repos/xxynet/KiraAI/releases/latest --jq .tag_name 2>/dev/null || true)
+            # Default: track newest release of ANY kind (stable or pre-release),
+            # excluding drafts. /releases is sorted by created_at desc, so the
+            # first non-draft entry is what we want.
+            RESP=$(gh api 'repos/xxynet/KiraAI/releases?per_page=20' \
+                     --jq '[.[] | select(.draft==false)] | .[0] | {tag:.tag_name, pre:.prerelease}' \
+                     2>/dev/null || true)
+            REF=$(printf '%s' "$RESP" | jq -r '.tag // empty')
+            PRERELEASE=$(printf '%s' "$RESP" | jq -r '.pre // false')
             if [ -z "$REF" ]; then
               echo "Failed to fetch latest KiraAI release via gh api — aborting."
               exit 1
             fi
-            echo "Latest KiraAI stable release: $REF"
+            echo "Latest KiraAI release: $REF (prerelease=$PRERELEASE)"
           else
             echo "Using user-provided ref: $REF"
+            # Best-effort: look up whether this user-provided tag is a pre-release.
+            PRERELEASE=$(gh api "repos/xxynet/KiraAI/releases/tags/$REF" --jq .prerelease 2>/dev/null || echo "false")
           fi
           # Resolve REF (tag → branch → raw SHA) to a concrete 40-char SHA.
           SHA=$(git ls-remote https://github.com/xxynet/KiraAI.git "refs/tags/$REF" | awk '{print $1}')
@@ -71,9 +81,10 @@ jobs:
           echo "ref=$REF"                              >> "$GITHUB_OUTPUT"
           echo "sha=$SHA"                              >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA"                  >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE"                >> "$GITHUB_OUTPUT"
           echo "build_date=$BUILD_DATE"                >> "$GITHUB_OUTPUT"
           echo "release_tag=${TAG_DATE}-${SHORT_SHA}"  >> "$GITHUB_OUTPUT"
-          echo "Tracking KiraAI @ $REF -> $SHA"
+          echo "Tracking KiraAI @ $REF -> $SHA (prerelease=$PRERELEASE)"
 
       - name: Probe build cache for this SHA
         id: probe
@@ -217,25 +228,31 @@ jobs:
       - name: Install Electron shell deps
         run: npm install
 
-      - name: Compute nightly version
+      - name: Compute app version
         shell: bash
+        env:
+          KIRAAI_REF: ${{ needs.check.outputs.kiraai_ref }}
+          RELEASE_TAG: ${{ needs.check.outputs.release_tag }}
         run: |
-          # KIRAAI_VER comes from the clone step (git describe --tags --always).
-          # Extract leading X.Y.Z (defaulting to 0.0.0) and suffix with the
-          # nightly tag so each build produces a unique, SemVer-compatible
-          # version that electron-builder will accept.
-          BASE=$(echo "$KIRAAI_VER" | sed 's/^v//' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-          [ -z "$BASE" ] && BASE="0.0.0"
-          NIGHTLY_VERSION="${BASE}-nightly.${{ needs.check.outputs.release_tag }}"
-          echo "NIGHTLY_VERSION=$NIGHTLY_VERSION" >> "$GITHUB_ENV"
-          echo "Nightly version: $NIGHTLY_VERSION"
+          # Mirror the upstream tag as our app version (strip leading 'v').
+          # Supports both stable (v1.2.3) and pre-release (v1.2.3-rc1) forms;
+          # both are valid semver, which is what electron-builder requires.
+          # Fall back to a date-based version if upstream tag isn't semver-ish.
+          CANDIDATE=$(echo "$KIRAAI_REF" | sed 's/^v//')
+          if echo "$CANDIDATE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.-]+)?$'; then
+            APP_VERSION="$CANDIDATE"
+          else
+            APP_VERSION="0.0.0-build.${RELEASE_TAG}"
+          fi
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "App version: $APP_VERSION (from upstream $KIRAAI_REF)"
 
       - name: Run electron-builder
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run ${{ matrix.script }} -- --config.extraMetadata.version="$NIGHTLY_VERSION"
+        run: npm run ${{ matrix.script }} -- --config.extraMetadata.version="$APP_VERSION"
 
       - name: List build output
         shell: bash
@@ -255,93 +272,9 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  backend-zip:
-    name: Package Python backend (source zip)
-    needs: check
-    if: needs.check.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone KiraAI backend at resolved SHA
-        shell: bash
-        env:
-          KIRAAI_SHA: ${{ needs.check.outputs.kiraai_sha }}
-          KIRAAI_REF: ${{ needs.check.outputs.kiraai_ref }}
-        run: |
-          git clone --filter=blob:none https://github.com/xxynet/KiraAI.git backend
-          cd backend
-          git checkout --detach "$KIRAAI_SHA"
-          KIRAAI_VER=$(git describe --tags --always 2>/dev/null || echo "$KIRAAI_SHA")
-          echo "KIRAAI_VER=$KIRAAI_VER" >> "$GITHUB_ENV"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/webui/frontend/package-lock.json
-
-      - name: Build KiraAI WebUI frontend
-        shell: bash
-        working-directory: backend/webui/frontend
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-          npm run build
-
-      - name: Stage frontend dist
-        shell: bash
-        run: |
-          set -e
-          mkdir -p backend/data/dist
-          if [ -d backend/webui/static/dist ] && [ -n "$(ls -A backend/webui/static/dist 2>/dev/null)" ]; then
-            cp -R backend/webui/static/dist/. backend/data/dist/
-          elif [ -d backend/webui/frontend/dist ] && [ -n "$(ls -A backend/webui/frontend/dist 2>/dev/null)" ]; then
-            cp -R backend/webui/frontend/dist/. backend/data/dist/
-          else
-            echo "ERROR: no frontend build output found"
-            exit 1
-          fi
-          echo "$KIRAAI_VER" > backend/data/dist/.version
-
-      - name: Strip dev / git metadata
-        shell: bash
-        run: |
-          rm -rf backend/.git \
-                 backend/webui/frontend/node_modules \
-                 backend/webui/frontend/.vite \
-                 backend/.github \
-                 backend/screenshots \
-                 backend/docs \
-                 backend/Dockerfile \
-                 backend/docker-compose.yml \
-                 backend/.dockerignore || true
-          find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-          find backend -type f -name '*.pyc' -delete 2>/dev/null || true
-
-      - name: Create zip
-        id: zip
-        shell: bash
-        run: |
-          ZIP_NAME="kiraAI-backend-${{ needs.check.outputs.release_tag }}.zip"
-          # zip backend/ into <ZIP_NAME>; top-level entry inside zip will be "backend/"
-          zip -rq "$ZIP_NAME" backend
-          ls -lh "$ZIP_NAME"
-          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Upload backend zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: kiraAI-DeskTop-backend
-          path: ${{ steps.zip.outputs.zip_name }}
-          if-no-files-found: error
-          retention-days: 90
-
   release:
-    name: Publish Nightly Pre-release
-    needs: [check, build, backend-zip]
+    name: Publish Rolling Release
+    needs: [check, build]
     if: >
       success() &&
       needs.check.outputs.should_build == 'true' &&
@@ -361,7 +294,7 @@ jobs:
           mkdir -p release
           find artifacts -type f \( \
             -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
-            -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \
+            -o -name '*.blockmap' -o -name 'latest*.yml' \
           \) -exec cp {} release/ \;
           ls -lah release
 
@@ -369,72 +302,99 @@ jobs:
         id: body
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KIRAAI_REF: ${{ needs.check.outputs.kiraai_ref }}
           KIRAAI_SHA: ${{ needs.check.outputs.kiraai_sha }}
           KIRAAI_SHORT: ${{ needs.check.outputs.kiraai_short_sha }}
+          KIRAAI_PRERELEASE: ${{ needs.check.outputs.kiraai_prerelease }}
           BUILD_DATE: ${{ needs.check.outputs.build_date }}
-          RELEASE_TAG: ${{ needs.check.outputs.release_tag }}
         run: |
+          # Numeric version (strip leading 'v') for asset-filename hints in the
+          # download list. electron-builder embeds this exact string in dmg/exe
+          # filenames, so users see e.g. "kiraAI-DeskTop-2.16.5-arm64.dmg".
+          VER_NUM=$(echo "$KIRAAI_REF" | sed 's/^v//')
+
+          if [ "$KIRAAI_PRERELEASE" = "true" ]; then
+            UPSTREAM_KIND="**pre-release**"
+            PRE_NOTE=$'\n> 🧪 Upstream KiraAI tag `'"${KIRAAI_REF}"$'` is a **pre-release** — expect rough edges. / 该构建基于 KiraAI 预发布版本，可能不稳定。\n'
+          else
+            UPSTREAM_KIND="stable release"
+            PRE_NOTE=""
+          fi
+
+          # Fetch upstream release notes (.body). Empty / missing → block is
+          # omitted entirely. Stored in a file via printf %s to avoid bash
+          # re-evaluating backticks or $(...) inside the upstream markdown.
+          UPSTREAM_BODY=$(gh api "repos/xxynet/KiraAI/releases/tags/$KIRAAI_REF" --jq '.body // ""' 2>/dev/null || printf '')
+          UPSTREAM_BLOCK=""
+          if [ -n "$(printf '%s' "$UPSTREAM_BODY" | tr -d '[:space:]')" ]; then
+            {
+              printf '<details>\n'
+              printf '<summary>📝 What'\''s new in KiraAI %s (上游更新内容)</summary>\n\n' "$KIRAAI_REF"
+              printf '%s\n\n' "$UPSTREAM_BODY"
+              printf '[Full release notes / 完整更新日志 →](https://github.com/xxynet/KiraAI/releases/tag/%s)\n\n' "$KIRAAI_REF"
+              printf '</details>\n'
+            } > /tmp/upstream-block.md
+            UPSTREAM_BLOCK=$(cat /tmp/upstream-block.md)
+          fi
+
           cat > release-body.md <<EOF
           # KiraAI ${KIRAAI_REF} — Desktop Build ${BUILD_DATE}
+          ${PRE_NOTE}
+          > ⚠️ This is an **unsigned** build for testing. / 未签名测试构建。
 
-          > ⚠️ This is an **unsigned** build for testing purposes.
-          >
-          > 🍎 **macOS users**: If you see *"kiraAI-DeskTop is damaged and can't be opened"*, run this in Terminal:
-          > \`\`\`
-          > xattr -cr /Applications/kiraAI-DeskTop.app
-          > \`\`\`
+          **Tracking KiraAI:** [\`${KIRAAI_REF}\`](https://github.com/xxynet/KiraAI/releases/tag/${KIRAAI_REF}) — ${UPSTREAM_KIND} (commit [\`${KIRAAI_SHORT}\`](https://github.com/xxynet/KiraAI/commit/${KIRAAI_SHA}))
 
-          **Tracking KiraAI:** [\`${KIRAAI_REF}\`](https://github.com/xxynet/KiraAI/releases/tag/${KIRAAI_REF}) (commit [\`${KIRAAI_SHORT}\`](https://github.com/xxynet/KiraAI/commit/${KIRAAI_SHA}))
+          ---
 
-          ## Desktop App (Electron + Python backend)
+          ## 📦 Download / 下载
 
-          | Platform | File |
-          | --- | --- |
-          | Windows x64 | \`kiraAI-DeskTop Setup *.exe\` (NSIS installer) |
-          | macOS Intel | \`kiraAI-DeskTop-*.dmg\` |
-          | macOS Apple Silicon | \`kiraAI-DeskTop-*-arm64.dmg\` |
-          | Linux x64 | \`*.AppImage\` / \`*.deb\` |
+          Pick the file that matches your OS. / 请下载对应你系统的文件：
 
-          The desktop app requires **Python 3.10+** on PATH at first run — it will create a venv and install dependencies automatically.
+          - **Windows** → \`kiraAI-DeskTop Setup ${VER_NUM}.exe\` (NSIS installer / 安装器)
+          - **macOS (Apple Silicon, M1/M2/M3+)** → \`kiraAI-DeskTop-${VER_NUM}-arm64.dmg\`
+          - **macOS (Intel)** → \`kiraAI-DeskTop-${VER_NUM}.dmg\` (no \`-arm64\` suffix / 不带 \`-arm64\`)
+          - **Linux** → \`*.AppImage\` (portable / 开箱即用) or \`*.deb\` (Debian / Ubuntu apt)
 
-          ## Python Backend Only (no Electron)
+          > 💡 First launch creates a Python venv and installs deps automatically. Requires **Python 3.10+** on PATH.
+          > 首次启动会自动创建 venv 并安装依赖，需要系统已安装 **Python 3.10+**。
 
-          | Platform | File |
-          | --- | --- |
-          | All (cross-platform) | \`kiraAI-backend-${RELEASE_TAG}.zip\` |
+          ${UPSTREAM_BLOCK}
 
-          Unzip and run \`backend/scripts/run.sh\` (mac/linux) or \`backend/scripts/run.bat\` (Windows).
+          <details>
+          <summary>🍎 macOS: "kiraAI-DeskTop is damaged and can't be opened" / macOS 提示"已损坏"？</summary>
+
+          Because this is an unsigned build, macOS Gatekeeper blocks it. Open Terminal and run:
+          这是未签名构建被 Gatekeeper 拦截。打开"终端"运行：
+
+          \`\`\`
+          xattr -cr /Applications/kiraAI-DeskTop.app
+          \`\`\`
+
+          Then open the app normally. / 之后即可正常打开。
+
+          </details>
           EOF
           echo "--- release body ---"
           cat release-body.md
 
-      - name: Delete previous rolling nightly release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Rolling nightly: tag is fixed as "nightly". Delete the existing
-          # release (and its tag) so we don't accumulate stale assets — asset
-          # filenames change every build because they embed the nightly version
-          # string, so a plain upload would keep old files around forever.
-          gh release delete nightly \
-            --yes --cleanup-tag \
-            --repo "${{ github.repository }}" 2>/dev/null || true
-
-      - name: Create rolling nightly Pre-release
+      - name: Publish release for upstream tag
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly
+          # Per-version, non-rolling: tag mirrors the upstream KiraAI tag, so
+          # each upstream release produces its own persistent GitHub release.
+          # If the tag already exists (e.g. workflow_dispatch with force=true),
+          # softprops/action-gh-release updates the release in place.
+          tag_name: ${{ needs.check.outputs.kiraai_ref }}
           name: KiraAI ${{ needs.check.outputs.kiraai_ref }} (built ${{ needs.check.outputs.build_date }})
           body_path: release-body.md
-          prerelease: true
+          prerelease: false
           files: release/*
-          make_latest: 'false'
+          make_latest: 'true'
 
   mark-built:
     name: Mark SHA built (cache)
-    needs: [check, build, backend-zip]
+    needs: [check, build]
     if: success() && needs.check.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
