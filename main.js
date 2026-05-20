@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
@@ -15,6 +15,7 @@ let mainWindow = null;
 let loadingWindow = null;
 let backendProcess = null;
 let isQuitting = false;
+let tray = null;
 
 function getBackendDir() {
     if (app.isPackaged) {
@@ -228,6 +229,78 @@ function stopBackend() {
     }
 }
 
+function createTray() {
+    if (tray) return;
+
+    const iconPath = path.join(__dirname, 'assets', 'KD-LOGO.ico');
+    let trayIcon;
+    if (fs.existsSync(iconPath)) {
+        trayIcon = nativeImage.createFromPath(iconPath);
+        if (process.platform === 'win32') {
+            trayIcon = trayIcon.resize({ width: 16, height: 16 });
+        }
+    } else {
+        trayIcon = nativeImage.createEmpty();
+    }
+
+    tray = new Tray(trayIcon);
+    tray.setToolTip('KiraAI');
+
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: '显示 KiraAI',
+            click: () => restoreFromTray()
+        },
+        { type: 'separator' },
+        {
+            label: '退出',
+            click: () => {
+                isQuitting = true;
+                if (tray) {
+                    tray.destroy();
+                    tray = null;
+                }
+                stopBackend();
+                app.quit();
+            }
+        }
+    ]);
+
+    tray.setContextMenu(contextMenu);
+
+    tray.on('click', () => {
+        restoreFromTray();
+    });
+}
+
+function minimizeToTray() {
+    if (!tray) createTray();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.hide();
+    }
+}
+
+function restoreFromTray() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow();
+    } else {
+        if (!mainWindow.isVisible()) {
+            mainWindow.show();
+        }
+        if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+        }
+        mainWindow.focus();
+    }
+}
+
+function destroyTray() {
+    if (tray) {
+        tray.destroy();
+        tray = null;
+    }
+}
+
 function createLoadingWindow() {
     loadingWindow = new BrowserWindow({
         width: 500,
@@ -306,31 +379,42 @@ function createWindow() {
     });
     
     mainWindow.on('close', async (event) => {
-        if (!isQuitting) {
-            event.preventDefault();
-
-            const { response } = await dialog.showMessageBox(mainWindow, {
-                type: 'question',
-                buttons: ['退出', '取消'],
-                defaultId: 1,
-                cancelId: 1,
-                title: 'KiraAI',
-                message: '确认退出 KiraAI？',
-                detail: '退出后后端服务将一并关闭，所有连接将断开。',
-                icon: path.join(__dirname, 'assets', 'KD-LOGO.ico')
-            });
-
-            if (response === 0) {
-                isQuitting = true;
-                mainWindow.hide();
-                stopBackend();
-                setTimeout(() => {
-                    app.quit();
-                }, 2000);
-            }
+        if (isQuitting) {
+            return;
         }
+        event.preventDefault();
+
+        const { response } = await dialog.showMessageBox(mainWindow, {
+            type: 'question',
+            buttons: ['退出程序', '最小化到托盘', '取消'],
+            defaultId: 2,
+            cancelId: 2,
+            title: 'KiraAI',
+            message: '请选择操作',
+            detail: '退出将关闭后端服务，最小化到托盘将在后台继续运行。',
+            icon: path.join(__dirname, 'assets', 'KD-LOGO.ico')
+        });
+
+        if (response === 0) {
+            // 退出程序
+            isQuitting = true;
+            mainWindow.hide();
+            stopBackend();
+            setTimeout(() => {
+                app.quit();
+            }, 2000);
+        } else if (response === 1) {
+            // 最小化到托盘
+            minimizeToTray();
+        }
+        // response === 2: 取消, do nothing
     });
-    
+
+    // Minimize to tray instead of taskbar
+    mainWindow.on('minimize', () => {
+        minimizeToTray();
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -357,7 +441,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    if (process.platform !== 'darwin' && !tray) {
         isQuitting = true;
         stopBackend();
         app.quit();
@@ -367,16 +451,20 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (mainWindow === null) {
         createWindow();
+    } else if (!mainWindow.isVisible()) {
+        mainWindow.show();
     }
 });
 
 app.on('before-quit', () => {
     isQuitting = true;
+    destroyTray();
     stopBackend();
 });
 
 app.on('will-quit', () => {
     isQuitting = true;
+    destroyTray();
     stopBackend();
 });
 
