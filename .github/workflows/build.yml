@@ -221,7 +221,7 @@ jobs:
           ls -lh build/icon.png
 
       - name: Generate dmg background placeholder (mac)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         shell: bash
         run: |
           # electron-builder 24.x with macOS-14+ runners crashes when dmgbuild
