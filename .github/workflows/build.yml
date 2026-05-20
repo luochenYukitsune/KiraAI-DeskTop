@@ -120,12 +120,21 @@ jobs:
           - os: windows-latest
             script: build:win
             artifact: kiraAI-DeskTop-windows
-          - os: macos-latest
+            extra: ''
+          # macOS 拆成两个原生 runner：Intel 出 x64 DMG，Apple Silicon 出 arm64 DMG。
+          # arm64 runner 跨 arch 构建 x64 DMG 时 hdiutil 会 flake（electron-builder#8329）。
+          - os: macos-13
             script: build:mac
-            artifact: kiraAI-DeskTop-macos
+            artifact: kiraAI-DeskTop-macos-x64
+            extra: '--x64'
+          - os: macos-15
+            script: build:mac
+            artifact: kiraAI-DeskTop-macos-arm64
+            extra: '--arm64'
           - os: ubuntu-latest
             script: build:linux
             artifact: kiraAI-DeskTop-linux
+            extra: ''
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Electron shell
@@ -252,7 +261,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run ${{ matrix.script }} -- --config.extraMetadata.version="$APP_VERSION"
+        run: npm run ${{ matrix.script }} -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
 
       - name: List build output
         shell: bash
