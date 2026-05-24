@@ -120,12 +120,18 @@ jobs:
           - os: windows-latest
             script: build:win
             artifact: kiraAI-DeskTop-windows
-          - os: macos-latest
+            extra: ''
+          # 只构建 Apple Silicon。Intel Mac 用户请自行从源码构建。
+          # 不混合 arch 也就避开了 arm64 runner 跨 arch 构建 x64 DMG 时
+          # hdiutil 的 flake（electron-builder#8329）。
+          - os: macos-15
             script: build:mac
-            artifact: kiraAI-DeskTop-macos
+            artifact: kiraAI-DeskTop-macos-arm64
+            extra: '--arm64'
           - os: ubuntu-latest
             script: build:linux
             artifact: kiraAI-DeskTop-linux
+            extra: ''
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Electron shell
@@ -212,7 +218,7 @@ jobs:
           ls -lh build/icon.png
 
       - name: Generate dmg background placeholder (mac)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         shell: bash
         run: |
           # electron-builder 24.x with macOS-14+ runners crashes when dmgbuild
@@ -252,7 +258,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run ${{ matrix.script }} -- --config.extraMetadata.version="$APP_VERSION"
+        run: npm run ${{ matrix.script }} -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
 
       - name: List build output
         shell: bash
@@ -352,9 +358,11 @@ jobs:
           Pick the file that matches your OS. / 请下载对应你系统的文件：
 
           - **Windows** → \`kiraAI-DeskTop Setup ${VER_NUM}.exe\` (NSIS installer / 安装器)
-          - **macOS (Apple Silicon, M1/M2/M3+)** → \`kiraAI-DeskTop-${VER_NUM}-arm64.dmg\`
-          - **macOS (Intel)** → \`kiraAI-DeskTop-${VER_NUM}.dmg\` (no \`-arm64\` suffix / 不带 \`-arm64\`)
+          - **macOS (Apple Silicon, M1/M2/M3+ only)** → \`kiraAI-DeskTop-${VER_NUM}-arm64.dmg\`
           - **Linux** → \`*.AppImage\` (portable / 开箱即用) or \`*.deb\` (Debian / Ubuntu apt)
+
+          > 🛑 **Intel Mac** 不再提供预编译版本，请自行从 [KiraAI](https://github.com/xxynet/KiraAI) 源码运行或本地构建 Electron 壳。
+          > Pre-built Intel Mac binaries are no longer provided — please run from KiraAI source or build the Electron shell locally.
 
           > 💡 First launch creates a Python venv and installs deps automatically. Requires **Python 3.10+** on PATH.
           > 首次启动会自动创建 venv 并安装依赖，需要系统已安装 **Python 3.10+**。
