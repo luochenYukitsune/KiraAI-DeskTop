@@ -381,9 +381,12 @@ end;
 { CompareVersion helper — 逐段数字比较，不依赖 packed version 类型 }
 function CompareVersion(const Version1, Version2: string): Integer;
 var
-  V1, V2: string;
-  P1, P2: Integer;
-  Num1, Num2: Integer;
+  V1: string;
+  V2: string;
+  P1: Integer;
+  P2: Integer;
+  Num1: Integer;
+  Num2: Integer;
 begin
   Result := 0;
   V1 := Version1;
