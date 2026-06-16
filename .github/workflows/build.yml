@@ -237,33 +237,9 @@ jobs:
       - name: Install Inno Setup (Windows)
         if: matrix.os == 'windows-latest'
         shell: powershell
-        run: |
-          choco install innosetup --no-progress --yes
-          # Add Inno Setup to GITHUB_PATH so `iscc` is found in bash steps
-          $isccDirs = @(
-            "${env:ProgramFiles(x86)}\Inno Setup 6",
-            "${env:ProgramFiles}\Inno Setup 6"
-          )
-          $found = $false
-          foreach ($dir in $isccDirs) {
-            if (Test-Path "$dir\ISCC.exe") {
-              echo "$dir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added $dir to PATH"
-              $found = $true
-              break
-            }
-          }
-          if (-not $found) {
-            # Fallback: search for ISCC.exe anywhere under Program Files
-            $match = Get-ChildItem "C:\Program Files*" -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue |
-                     Select-Object -First 1
-            if ($match) {
-              echo "$($match.DirectoryName)" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              echo "Added $($match.DirectoryName) to PATH (fallback)"
-            } else {
-              Write-Error "ISCC.exe not found after installing Inno Setup"
-            }
-          }
+        # The "Build Inno Setup installer" step below locates ISCC.exe itself,
+        # so we only need to install it here.
+        run: choco install innosetup --no-progress --yes
 
       - name: Compute app version
         shell: bash
@@ -292,20 +268,6 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           npm run build:win:pack -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
-
-      - name: Debug Inno Setup files (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          Write-Output "=== Current directory ==="
-          Get-Location
-          Write-Output "=== build directory ==="
-          if (Test-Path build) {
-            Get-ChildItem build -Recurse | ForEach-Object { Write-Output $_.FullName }
-          } else {
-            Write-Output "build directory NOT FOUND"
-            Get-ChildItem -Recurse | Where-Object { $_.Name -like "*.iss" } | ForEach-Object { Write-Output "Found ISS: $($_.FullName)" }
-          }
 
       - name: Build Inno Setup installer (Windows)
         if: runner.os == 'Windows'

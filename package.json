@@ -68,7 +68,7 @@
             "icon": "assets/KD-LOGO.ico",
             "target": [
                 {
-                    "target": "portable",
+                    "target": "dir",
                     "arch": ["x64"]
                 }
             ]

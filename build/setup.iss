@@ -35,6 +35,12 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 AppVerName={#MyAppName} {#MyAppVersion}
 
+; Architecture — app ships x64 only. Installing in 64-bit mode makes {pf}
+; resolve to the real "C:\Program Files" so the Program Files guard below
+; actually covers it (in 32-bit mode {pf} == {pf32} == Program Files (x86)).
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+
 ; Install directory — avoid Program Files per NSIS legacy behavior
 DefaultDirName=C:\{#MyAppName}
 DisableDirPage=no
@@ -86,7 +92,7 @@ Source: "{#ElectronBuilderOutDir}\*"; DestDir: "{app}"; Flags: ignoreversion rec
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{autodesktop}\KiraAI 数据目录"; Filename: "{win}\explorer.exe"; Parameters: "{code:GetDataDir}"; Tasks: datadesktopicon; Comment: "KiraAI Data Directory"
+Name: "{autodesktop}\KiraAI 数据目录"; Filename: "{win}\explorer.exe"; Parameters: """{code:GetDataDir}"""; Tasks: datadesktopicon; Comment: "KiraAI Data Directory"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
@@ -229,6 +235,20 @@ begin
   end;
 end;
 
+{ --- Enforce path validation for silent / command-line installs --- }
+{ NextButtonClick never fires in /SILENT or /VERYSILENT mode, so re-run the
+  checks here (which runs in both modes) for silent installs only — avoids
+  double-prompting interactive users who already passed NextButtonClick. A
+  non-empty Result aborts the install with that message. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if WizardSilent and (not ValidateInstallPath(WizardDirValue)) then
+    Result :=
+      '安装路径无效：请使用纯英文、无空格、且不在 Program Files 下的路径（如 C:\KiraAI）。' + #13#10 +
+      'Invalid installation path. Use an English-only, space-free path outside Program Files (e.g. C:\KiraAI).';
+end;
+
 { --- Post-install: create data directory --- }
 
 procedure CreateDataDir();
@@ -244,88 +264,92 @@ end;
 
 { --- Migrate configuration from NSIS installation --- }
 
+{ Scan one Uninstall registry root for an entry whose DisplayName matches the
+  app AND that has an NSIS-style uninstaller on disk, returning its
+  InstallLocation. electron-builder's NSIS target keys the uninstall entry by a
+  GUID derived from appId — never the product name — so matching the subkey
+  name directly never works; we match on DisplayName instead. The on-disk
+  uninstaller check ensures we don't mistake a previous Inno install (same
+  DisplayName, no such file) for a legacy NSIS one. }
+function FindNsisInstallPath(RootKey: Integer): string;
+var
+  UninstallRoot: string;
+  Names: TArrayOfString;
+  I: Integer;
+  DisplayName: string;
+  InstallLocation: string;
+begin
+  Result := '';
+  UninstallRoot := 'Software\Microsoft\Windows\CurrentVersion\Uninstall';
+  if not RegGetSubkeyNames(RootKey, UninstallRoot, Names) then
+    Exit;
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    if RegQueryStringValue(RootKey, UninstallRoot + '\' + Names[I], 'DisplayName', DisplayName) and SameText(DisplayName, '{#MyAppName}') then
+    begin
+      if RegQueryStringValue(RootKey, UninstallRoot + '\' + Names[I], 'InstallLocation', InstallLocation) and (InstallLocation <> '') then
+      begin
+        if FileExists(InstallLocation + '\Uninstall {#MyAppName}.exe') or FileExists(InstallLocation + '\uninst.exe') then
+        begin
+          Result := InstallLocation;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
 procedure MigrateFromNSIS();
 var
-  NsisUninstallPath: string;
   NsisInstallPath: string;
-  OldDataDir: string;
-  NewDataDir: string;
-  OldWebuiJson: string;
-  NewWebuiJson: string;
   MigrateResult: Integer;
 begin
-  { Check for NSIS uninstaller in all registry views (64-bit + 32-bit) }
-  NsisInstallPath := '';
-  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
-  begin
-    { Found NSIS install in HKLM 64-bit }
-  end
-  else if RegQueryStringValue(HKCU64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
-  begin
-    { Found NSIS install in HKCU 64-bit }
-  end
-  else if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
-  begin
-    { Found NSIS install in HKLM 32-bit view }
-  end
-  else if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
-  begin
-    { Found NSIS install in HKCU 32-bit view }
-  end
-  else if RegQueryStringValue(HKLM64, 'Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
-  begin
-    { Found NSIS install in Wow6432Node fallback }
-  end;
+  { Look for an existing NSIS install across all registry roots/views.
+    electron-builder NSIS was perMachine:false, so HKCU is the likely home. }
+  NsisInstallPath := FindNsisInstallPath(HKLM64);
+  if NsisInstallPath = '' then
+    NsisInstallPath := FindNsisInstallPath(HKCU64);
+  if NsisInstallPath = '' then
+    NsisInstallPath := FindNsisInstallPath(HKLM);
+  if NsisInstallPath = '' then
+    NsisInstallPath := FindNsisInstallPath(HKCU);
 
-  if NsisInstallPath <> '' then
+  if (NsisInstallPath <> '') and (not SameText(NsisInstallPath, WizardDirValue)) then
   begin
-    { Check if NSIS install is different from current install }
-    if not SameText(NsisInstallPath, WizardDirValue) then
+    { Note: user data lives in %LOCALAPPDATA%\kiraAI-DeskTop and is untouched by
+      the old uninstaller, so this is a "remove old version" step, not a config
+      copy. }
+    MigrateResult := SuppressibleMsgBox(
+      '检测到旧版本 NSIS 安装于：' + #13#10 +
+      NsisInstallPath + #13#10 + #13#10 +
+      '是否要移除旧版本？' + #13#10 +
+      '（你的聊天记录和设置保存在 %LOCALAPPDATA%\kiraAI-DeskTop，不会被改动）' + #13#10 + #13#10 +
+      'Detected previous NSIS installation at:' + #13#10 +
+      NsisInstallPath + #13#10 + #13#10 +
+      'Remove the old version?' + #13#10 +
+      '(Your chat history and settings in %LOCALAPPDATA%\kiraAI-DeskTop are left untouched)',
+      mbConfirmation, MB_YESNO, IDYES);
+    if MigrateResult = IDYES then
     begin
-      MigrateResult := SuppressibleMsgBox(
-        '检测到旧版本 NSIS 安装于：' + #13#10 +
-        NsisInstallPath + #13#10 + #13#10 +
-        '是否要迁移配置并移除旧版本？' + #13#10 +
-        '（你的聊天记录和设置将保留在 %LOCALAPPDATA%\kiraAI-DeskTop）' + #13#10 + #13#10 +
-        'Detected previous NSIS installation at:' + #13#10 +
-        NsisInstallPath + #13#10 + #13#10 +
-        'Migrate config and remove old version?' + #13#10 +
-        '(Your chat history and settings in %LOCALAPPDATA%\kiraAI-DeskTop will be preserved)',
-        mbConfirmation, MB_YESNO, IDYES);
-      if MigrateResult = IDYES then
+      { Run the NSIS uninstaller — try the primary name, then the fallback.
+        FindNsisInstallPath already guaranteed one of these exists. }
+      if FileExists(NsisInstallPath + '\Uninstall {#MyAppName}.exe') then
       begin
-        { Attempt to run the NSIS uninstaller — try primary name first }
-        if FileExists(NsisInstallPath + '\Uninstall {#MyAppName}.exe') then
-        begin
-          if not Exec(RemoveQuotes(NsisInstallPath + '\Uninstall {#MyAppName}.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult) then
-          begin
-            SuppressibleMsgBox(
-              '无法启动旧版本卸载程序。请手动卸载后再试。' + #13#10 +
-              NsisInstallPath + '\Uninstall {#MyAppName}.exe' + #13#10 + #13#10 +
-              'Could not launch the legacy uninstaller. Please uninstall manually.',
-              mbError, MB_OK, IDOK);
-          end;
-        end
-        { Fallback: try alternative NSIS uninstaller naming }
-        else if FileExists(NsisInstallPath + '\uninst.exe') then
-        begin
-          if not Exec(RemoveQuotes(NsisInstallPath + '\uninst.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult) then
-          begin
-            SuppressibleMsgBox(
-              '无法启动旧版本卸载程序。请手动卸载后再试。' + #13#10 +
-              NsisInstallPath + '\uninst.exe' + #13#10 + #13#10 +
-              'Could not launch the legacy uninstaller. Please uninstall manually.',
-              mbError, MB_OK, IDOK);
-          end;
-        end
-        else
-        begin
+        if not Exec(RemoveQuotes(NsisInstallPath + '\Uninstall {#MyAppName}.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult) then
           SuppressibleMsgBox(
-            '未找到旧版本卸载程序，将继续安装。' + #13#10 +
-            'If the old version still exists, please uninstall it manually.' + #13#10 +
-            NsisInstallPath,
-            mbInformation, MB_OK, IDOK);
-        end;
+            '无法启动旧版本卸载程序。请手动卸载后再试。' + #13#10 +
+            NsisInstallPath + '\Uninstall {#MyAppName}.exe' + #13#10 + #13#10 +
+            'Could not launch the legacy uninstaller. Please uninstall manually.',
+            mbError, MB_OK, IDOK);
+      end
+      else if FileExists(NsisInstallPath + '\uninst.exe') then
+      begin
+        if not Exec(RemoveQuotes(NsisInstallPath + '\uninst.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult) then
+          SuppressibleMsgBox(
+            '无法启动旧版本卸载程序。请手动卸载后再试。' + #13#10 +
+            NsisInstallPath + '\uninst.exe' + #13#10 + #13#10 +
+            'Could not launch the legacy uninstaller. Please uninstall manually.',
+            mbError, MB_OK, IDOK);
       end;
     end;
   end;
@@ -384,8 +408,10 @@ var
 begin
   Result := True;
 
-  { 检测已安装版本，仅提示不比较 }
-  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1', 'DisplayVersion', ExistingVersion) then
+  { 检测已安装版本，仅提示不比较。
+    注意：注册表子键用 AppId 的单花括号字面量；不能用 {#SetupSetting("AppId")}，
+    它会原样输出 AppId 指令里转义用的双花括号 {{...}，导致键名多一个花括号、永不匹配。 }
+  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E8D9F1-3A4C-4F6E-9D7B-8C1A2E5F0D3B}_is1', 'DisplayVersion', ExistingVersion) then
   begin
     SuppressibleMsgBox(
       '检测到已安装版本 ' + ExistingVersion + '，将升级到 {#MyAppVersion}。' + #13#10 + #13#10 +
