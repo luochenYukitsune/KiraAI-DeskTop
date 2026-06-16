@@ -11,7 +11,10 @@
 ;   choco install innosetup
 
 #define MyAppName "kiraAI-DeskTop"
-#define MyAppVersion "2.17.0"
+; Version — override at compile time: iscc /dMyAppVersion=X.Y.Z build\setup.iss
+#ifndef MyAppVersion
+  #define MyAppVersion "2.17.0"
+#endif
 #define MyAppPublisher "KiraAI Team"
 #define MyAppURL "https://github.com/xxynet/KiraAI"
 #define MyAppExeName "kiraAI-DeskTop.exe"
@@ -78,7 +81,7 @@ Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "
 Name: "datadesktopicon"; Description: "Create data directory shortcut on desktop"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "{#ElectronBuilderOutDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsremovereadonly; Check: ValidateInstallPath
+Source: "{#ElectronBuilderOutDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsremovereadonly
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
@@ -89,7 +92,8 @@ Name: "{autodesktop}\KiraAI 数据目录"; Filename: "{win}\explorer.exe"; Param
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallRun]
-Filename: "{cmd}"; Parameters: "/C taskkill /F /IM ""{#MyAppExeName}"" /T"; Flags: runhidden; RunOnceId: KillApp
+; Scoped kill: only terminate our EXE running from {app}, not other instances
+Filename: "powershell"; Parameters: "-Command ""& { Get-Process '{#StringChange(MyAppExeName, ".exe", "")}' -ErrorAction SilentlyContinue | Where-Object { $_.MainModule.FileName -eq '{app}\{#MyAppExeName}' } | Stop-Process -Force -ErrorAction SilentlyContinue }"""; Flags: runhidden; RunOnceId: KillApp
 
 ; ---------------------------------------------------------------------------
 ; [Code] — Pascal logic for path validation, data dir, and NSIS migration
@@ -117,11 +121,34 @@ function IsProgramFiles(const Path: string): Boolean;
 var
   Normalized: string;
   Pf, Pf86: string;
+  PfLen, Pf86Len: Integer;
 begin
+  Result := False;
   Normalized := LowerCase(Path);
   Pf := LowerCase(ExpandConstant('{pf}'));
   Pf86 := LowerCase(ExpandConstant('{pf32}'));
-  Result := (Pos(Pf, Normalized) = 1) or (Pos(Pf86, Normalized) = 1);
+  PfLen := Length(Pf);
+  Pf86Len := Length(Pf86);
+
+  { Check {pf}: must be at start, followed by '\' or end-of-string }
+  if (Pos(Pf, Normalized) = 1) then
+  begin
+    if (Length(Normalized) = PfLen) or (Normalized[PfLen + 1] = '\') then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  { Check {pf32}: same boundary logic }
+  if (Pos(Pf86, Normalized) = 1) then
+  begin
+    if (Length(Normalized) = Pf86Len) or (Normalized[Pf86Len + 1] = '\') then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
 end;
 
 function ContainsNonASCII(const S: string): Boolean;
@@ -227,15 +254,27 @@ var
   NewWebuiJson: string;
   MigrateResult: Integer;
 begin
-  { Check for NSIS uninstaller in both HKLM and HKCU }
+  { Check for NSIS uninstaller in all registry views (64-bit + 32-bit) }
   NsisInstallPath := '';
   if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
   begin
-    { Found NSIS install in HKLM }
+    { Found NSIS install in HKLM 64-bit }
   end
   else if RegQueryStringValue(HKCU64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
   begin
-    { Found NSIS install in HKCU }
+    { Found NSIS install in HKCU 64-bit }
+  end
+  else if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
+  begin
+    { Found NSIS install in HKLM 32-bit view }
+  end
+  else if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
+  begin
+    { Found NSIS install in HKCU 32-bit view }
+  end
+  else if RegQueryStringValue(HKLM64, 'Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}', 'InstallLocation', NsisInstallPath) then
+  begin
+    { Found NSIS install in Wow6432Node fallback }
   end;
 
   if NsisInstallPath <> '' then
@@ -255,16 +294,37 @@ begin
         mbConfirmation, MB_YESNO, IDYES);
       if MigrateResult = IDYES then
       begin
-        { Attempt to run the NSIS uninstaller silently }
-        Exec(RemoveQuotes(NsisInstallPath + '\Uninstall {#MyAppName}.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult);
-        { Also try alternative NSIS uninstaller naming }
-        if not DirExists(NsisInstallPath) then
+        { Attempt to run the NSIS uninstaller — try primary name first }
+        if FileExists(NsisInstallPath + '\Uninstall {#MyAppName}.exe') then
         begin
-          { Uninstall removed the directory — success }
+          if not Exec(RemoveQuotes(NsisInstallPath + '\Uninstall {#MyAppName}.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult) then
+          begin
+            SuppressibleMsgBox(
+              '无法启动旧版本卸载程序。请手动卸载后再试。' + #13#10 +
+              NsisInstallPath + '\Uninstall {#MyAppName}.exe' + #13#10 + #13#10 +
+              'Could not launch the legacy uninstaller. Please uninstall manually.',
+              mbError, MB_OK, IDOK);
+          end;
+        end
+        { Fallback: try alternative NSIS uninstaller naming }
+        else if FileExists(NsisInstallPath + '\uninst.exe') then
+        begin
+          if not Exec(RemoveQuotes(NsisInstallPath + '\uninst.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult) then
+          begin
+            SuppressibleMsgBox(
+              '无法启动旧版本卸载程序。请手动卸载后再试。' + #13#10 +
+              NsisInstallPath + '\uninst.exe' + #13#10 + #13#10 +
+              'Could not launch the legacy uninstaller. Please uninstall manually.',
+              mbError, MB_OK, IDOK);
+          end;
         end
         else
         begin
-          Exec(RemoveQuotes(NsisInstallPath + '\uninst.exe'), '/S _?=' + NsisInstallPath, '', SW_HIDE, ewWaitUntilTerminated, MigrateResult);
+          SuppressibleMsgBox(
+            '未找到旧版本卸载程序，将继续安装。' + #13#10 +
+            'If the old version still exists, please uninstall it manually.' + #13#10 +
+            NsisInstallPath,
+            mbInformation, MB_OK, IDOK);
         end;
       end;
     end;
@@ -317,6 +377,18 @@ begin
 end;
 
 { --- Pre-install validation (early abort, before wizard pages) --- }
+
+{ CompareVersion helper — Inno Setup does not provide this built-in }
+function CompareVersion(const Version1, Version2: string): Integer;
+var
+  V1, V2: packed version;
+begin
+  if not StrToVersion(Version1, V1) then
+    V1 := (0 shl 48) or (0 shl 32) or (0 shl 16) or 0;
+  if not StrToVersion(Version2, V2) then
+    V2 := (0 shl 48) or (0 shl 32) or (0 shl 16) or 0;
+  Result := ComparePackedVersion(V1, V2);
+end;
 
 function InitializeSetup(): Boolean;
 var
