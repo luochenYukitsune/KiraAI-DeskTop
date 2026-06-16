@@ -234,6 +234,11 @@ jobs:
       - name: Install Electron shell deps
         run: npm install
 
+      - name: Install Inno Setup (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: choco install innosetup --no-progress
+
       - name: Compute app version
         shell: bash
         env:
@@ -258,7 +263,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run ${{ matrix.script }} -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            # Windows: build unpacked app, then compile Inno Setup installer
+            npm run build:win:pack -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
+            iscc build/setup.iss
+          else
+            npm run ${{ matrix.script }} -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
+          fi
 
       - name: List build output
         shell: bash
@@ -357,7 +369,7 @@ jobs:
 
           Pick the file that matches your OS. / 请下载对应你系统的文件：
 
-          - **Windows** → \`kiraAI-DeskTop Setup ${VER_NUM}.exe\` (NSIS installer / 安装器)
+          - **Windows** → \`kiraAI-DeskTop Setup ${VER_NUM}.exe\` (Inno Setup installer / 安装器)
           - **macOS (Apple Silicon, M1/M2/M3+ only)** → \`kiraAI-DeskTop-${VER_NUM}-arm64.dmg\`
           - **Linux** → \`*.AppImage\` (portable / 开箱即用) or \`*.deb\` (Debian / Ubuntu apt)
 
