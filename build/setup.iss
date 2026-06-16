@@ -71,7 +71,7 @@ UsePreviousTasks=yes
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
-Name: "zh"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "zh"; MessagesFile: "..\build\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkablealone
