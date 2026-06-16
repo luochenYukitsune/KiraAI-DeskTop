@@ -21,7 +21,7 @@
 
 ; electron-builder --dir output path (varies by electron-builder version)
 #ifndef ElectronBuilderOutDir
-  #define ElectronBuilderOutDir "..\dist\win-x64-unpacked"
+  #define ElectronBuilderOutDir "..\dist\win-unpacked"
 #endif
 
 [Setup]
