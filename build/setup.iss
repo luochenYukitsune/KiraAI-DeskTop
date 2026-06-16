@@ -41,8 +41,11 @@ AppVerName={#MyAppName} {#MyAppVersion}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
-; Install directory — avoid Program Files per NSIS legacy behavior
-DefaultDirName=C:\{#MyAppName}
+; Install directory — adapts to the chosen install mode (see GetDefaultDirName):
+;   all-users  -> C:\<app>            (admin, space/ASCII-safe root)
+;   per-user   -> %LOCALAPPDATA%\Programs\<app>
+; Both avoid Program Files per NSIS legacy behavior.
+DefaultDirName={code:GetDefaultDirName}
 DisableDirPage=no
 DirExistsWarning=no
 
@@ -64,9 +67,11 @@ InternalCompressLevel=max
 WizardStyle=modern
 DisableWelcomePage=no
 
-; Privileges: require admin to write to C:\ and create all-users Start Menu
+; Privileges: default to all-users (admin), but let the user pick "install for
+; me only" on the startup page. Per-user mode runs unelevated, so {localappdata}
+; (data dir) correctly resolves to the user who will actually run the app.
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=commandline
+PrivilegesRequiredOverridesAllowed=commandline dialog
 
 ; Uninstall
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -177,6 +182,18 @@ end;
 function GetDataDir(Param: string): string;
 begin
   Result := ExpandConstant('{localappdata}') + '\{#MyAppName}';
+end;
+
+{ --- Default install dir, adapting to the chosen install mode --- }
+{ all-users (admin) -> space/ASCII-safe C:\ root; per-user -> under the user's
+  own LocalAppData. Wired into [Setup] via DefaultDirName={code:GetDefaultDirName}. }
+
+function GetDefaultDirName(Param: string): string;
+begin
+  if IsAdminInstallMode() then
+    Result := 'C:\{#MyAppName}'
+  else
+    Result := ExpandConstant('{localappdata}') + '\Programs\{#MyAppName}';
 end;
 
 { --- Install path validation (runs on "Next" click from directory page) --- }
@@ -408,10 +425,11 @@ var
 begin
   Result := True;
 
-  { 检测已安装版本，仅提示不比较。
+  { 检测已安装版本，仅提示不比较。HKLM64=全机安装，HKCU=仅为我安装。
     注意：注册表子键用 AppId 的单花括号字面量；不能用 {#SetupSetting("AppId")}，
     它会原样输出 AppId 指令里转义用的双花括号 {{...}，导致键名多一个花括号、永不匹配。 }
-  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E8D9F1-3A4C-4F6E-9D7B-8C1A2E5F0D3B}_is1', 'DisplayVersion', ExistingVersion) then
+  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E8D9F1-3A4C-4F6E-9D7B-8C1A2E5F0D3B}_is1', 'DisplayVersion', ExistingVersion) or
+     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E8D9F1-3A4C-4F6E-9D7B-8C1A2E5F0D3B}_is1', 'DisplayVersion', ExistingVersion) then
   begin
     SuppressibleMsgBox(
       '检测到已安装版本 ' + ExistingVersion + '，将升级到 {#MyAppVersion}。' + #13#10 + #13#10 +
