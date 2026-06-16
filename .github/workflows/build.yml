@@ -234,6 +234,13 @@ jobs:
       - name: Install Electron shell deps
         run: npm install
 
+      - name: Install Inno Setup (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        # The "Build Inno Setup installer" step below locates ISCC.exe itself,
+        # so we only need to install it here.
+        run: choco install innosetup --no-progress --yes
+
       - name: Compute app version
         shell: bash
         env:
@@ -253,7 +260,64 @@ jobs:
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "App version: $APP_VERSION (from upstream $KIRAAI_REF)"
 
-      - name: Run electron-builder
+      - name: Run electron-builder (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm run build:win:pack -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
+
+      - name: Build Inno Setup installer (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+        run: |
+          # 查找 ISCC
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            $found = Get-ChildItem "C:\Program Files*" -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $iscc = $found.FullName }
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found"
+          }
+
+          # 检查版本号
+          if ([string]::IsNullOrEmpty($env:APP_VERSION)) {
+            throw "APP_VERSION is not set"
+          }
+
+          # 使用绝对路径
+          $script = Join-Path $PWD "build\setup.iss"
+          if (-not (Test-Path $script)) {
+            throw "Setup script not found: $script"
+          }
+
+          Write-Output "ISCC: $iscc"
+          Write-Output "Script: $script"
+          Write-Output "Version: $env:APP_VERSION"
+
+          # 使用数组传递参数，避免解析问题
+          $compilerArgs = @(
+            "/dMyAppVersion=$env:APP_VERSION",
+            $script
+          )
+
+          Write-Output "Command: $iscc $compilerArgs"
+          & $iscc @compilerArgs
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "ISCC failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run electron-builder (macOS / Linux)
+        if: runner.os != 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -357,7 +421,7 @@ jobs:
 
           Pick the file that matches your OS. / 请下载对应你系统的文件：
 
-          - **Windows** → \`kiraAI-DeskTop Setup ${VER_NUM}.exe\` (NSIS installer / 安装器)
+          - **Windows** → \`kiraAI-DeskTop Setup ${VER_NUM}.exe\` (Inno Setup installer / 安装器)
           - **macOS (Apple Silicon, M1/M2/M3+ only)** → \`kiraAI-DeskTop-${VER_NUM}-arm64.dmg\`
           - **Linux** → \`*.AppImage\` (portable / 开箱即用) or \`*.deb\` (Debian / Ubuntu apt)
 

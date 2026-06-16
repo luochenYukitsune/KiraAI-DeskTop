@@ -11,7 +11,8 @@
     "scripts": {
         "start": "electron .",
         "build": "electron-builder",
-        "build:win": "electron-builder --win",
+        "build:win": "electron-builder --win --dir && iscc build/setup.iss",
+        "build:win:pack": "electron-builder --win --dir",
         "build:mac": "electron-builder --mac",
         "build:linux": "electron-builder --linux",
         "build:dir": "electron-builder --dir",
@@ -65,24 +66,12 @@
         ],
         "win": {
             "icon": "assets/KD-LOGO.ico",
-            "requestedExecutionLevel": "requireAdministrator",
             "target": [
                 {
-                    "target": "nsis",
-                    "arch": [
-                        "x64"
-                    ]
+                    "target": "dir",
+                    "arch": ["x64"]
                 }
             ]
-        },
-        "nsis": {
-            "oneClick": false,
-            "perMachine": false,
-            "allowToChangeInstallationDirectory": true,
-            "createDesktopShortcut": true,
-            "createStartMenuShortcut": true,
-            "shortcutName": "kiraAI-DeskTop",
-            "include": "build/installer.nsh"
         },
         "mac": {
             "category": "public.app-category.developer-tools",
