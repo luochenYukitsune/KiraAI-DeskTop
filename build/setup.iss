@@ -378,86 +378,21 @@ end;
 
 { --- Pre-install validation (early abort, before wizard pages) --- }
 
-{ CompareVersion helper — 逐段数字比较，不依赖 packed version 类型 }
-function CompareVersion(const Version1, Version2: string): Integer;
-var
-  V1: string;
-  V2: string;
-  P1: Integer;
-  P2: Integer;
-  Num1: Integer;
-  Num2: Integer;
-begin
-  Result := 0;
-  V1 := Version1;
-  V2 := Version2;
-
-  while (Result = 0) and ((V1 <> '') or (V2 <> '')) do
-  begin
-    { 获取 V1 的第一段 }
-    P1 := Pos('.', V1);
-    if P1 = 0 then
-    begin
-      if V1 <> '' then
-      begin
-        Num1 := StrToIntDef(V1, 0);
-        V1 := '';
-      end
-      else
-        Num1 := 0;
-    end
-    else
-    begin
-      Num1 := StrToIntDef(Copy(V1, 1, P1 - 1), 0);
-      Delete(V1, 1, P1);
-    end;
-
-    { 获取 V2 的第一段 }
-    P2 := Pos('.', V2);
-    if P2 = 0 then
-    begin
-      if V2 <> '' then
-      begin
-        Num2 := StrToIntDef(V2, 0);
-        V2 := '';
-      end
-      else
-        Num2 := 0;
-    end
-    else
-    begin
-      Num2 := StrToIntDef(Copy(V2, 1, P2 - 1), 0);
-      Delete(V2, 1, P2);
-    end;
-
-    if Num1 > Num2 then
-      Result := 1
-    else if Num1 < Num2 then
-      Result := -1;
-  end;
-end;
-
 function InitializeSetup(): Boolean;
 var
   ExistingVersion: string;
-  CurrentVersion: string;
-  UpgradeResult: Integer;
 begin
   Result := True;
 
-  { Detect existing Inno Setup installation and warn about upgrade }
-  CurrentVersion := '{#MyAppVersion}';
+  { 检测已安装版本，仅提示不比较 }
   if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1', 'DisplayVersion', ExistingVersion) then
   begin
-    if CompareVersion(ExistingVersion, CurrentVersion) < 0 then
-    begin
-      UpgradeResult := SuppressibleMsgBox(
-        '检测到旧版本 (' + ExistingVersion + ')，将升级到 ' + CurrentVersion + '。' + #13#10 + #13#10 +
-        '你的配置和数据将被保留。' + #13#10 + #13#10 +
-        'Existing installation (' + ExistingVersion + ') detected.' + #13#10 +
-        'Will upgrade to ' + CurrentVersion + '.' + #13#10 +
-        'Your configuration and data will be preserved.',
-        mbInformation, MB_OK, IDOK);
-    end;
+    SuppressibleMsgBox(
+      '检测到已安装版本 ' + ExistingVersion + '，将升级到 {#MyAppVersion}。' + #13#10 + #13#10 +
+      '你的配置和数据将被保留。' + #13#10 + #13#10 +
+      'Existing installation (' + ExistingVersion + ') detected.' + #13#10 +
+      'Will upgrade to {#MyAppVersion}.' + #13#10 +
+      'Your configuration and data will be preserved.',
+      mbInformation, MB_OK, IDOK);
   end;
 end;
