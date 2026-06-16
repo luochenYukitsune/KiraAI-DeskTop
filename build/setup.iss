@@ -141,7 +141,7 @@ begin
   PfLen := Length(Pf);
   Pf86Len := Length(Pf86);
 
-  { Check {pf}: must be at start, followed by '\' or end-of-string }
+  // Check {pf}: must be at start, followed by '\' or end-of-string
   if (Pos(Pf, Normalized) = 1) then
   begin
     if (Length(Normalized) = PfLen) or (Normalized[PfLen + 1] = '\') then
@@ -151,7 +151,7 @@ begin
     end;
   end;
 
-  { Check {pf32}: same boundary logic }
+  // Check {pf32}: same boundary logic
   if (Pos(Pf86, Normalized) = 1) then
   begin
     if (Length(Normalized) = Pf86Len) or (Normalized[Pf86Len + 1] = '\') then
@@ -177,16 +177,16 @@ begin
   end;
 end;
 
-{ --- Data directory path (exposed to [Icons] via {code:GetDataDir}) --- }
+// --- Data directory path (exposed to [Icons] via {code:GetDataDir}) ---
 
 function GetDataDir(Param: string): string;
 begin
   Result := ExpandConstant('{localappdata}') + '\{#MyAppName}';
 end;
 
-{ --- Default install dir, adapting to the chosen install mode --- }
-{ all-users (admin) -> space/ASCII-safe C:\ root; per-user -> under the user's
-  own LocalAppData. Wired into [Setup] via DefaultDirName={code:GetDefaultDirName}. }
+// --- Default install dir, adapting to the chosen install mode ---
+// all-users (admin) -> space/ASCII-safe C:\ root; per-user -> under the
+// user's own LocalAppData. Wired into [Setup] via the DefaultDirName code constant.
 
 function GetDefaultDirName(Param: string): string;
 begin
@@ -425,9 +425,9 @@ var
 begin
   Result := True;
 
-  { 检测已安装版本，仅提示不比较。HKLM64=全机安装，HKCU=仅为我安装。
-    注意：注册表子键用 AppId 的单花括号字面量；不能用 {#SetupSetting("AppId")}，
-    它会原样输出 AppId 指令里转义用的双花括号 {{...}，导致键名多一个花括号、永不匹配。 }
+  // 检测已安装版本，仅提示不比较。HKLM64=全机安装，HKCU=仅为我安装。
+  // 注意：注册表子键用 AppId 的单花括号字面量，不要用 SetupSetting 的 emit 形式，
+  // 它会原样输出 AppId 指令里转义用的双花括号，导致键名多一个花括号、永不匹配。
   if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E8D9F1-3A4C-4F6E-9D7B-8C1A2E5F0D3B}_is1', 'DisplayVersion', ExistingVersion) or
      RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B2E8D9F1-3A4C-4F6E-9D7B-8C1A2E5F0D3B}_is1', 'DisplayVersion', ExistingVersion) then
   begin
