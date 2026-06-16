@@ -92,8 +92,8 @@ Name: "{autodesktop}\KiraAI 数据目录"; Filename: "{win}\explorer.exe"; Param
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallRun]
-; Scoped kill: only terminate our EXE running from {app}, not other instances
-Filename: "powershell"; Parameters: "-Command ""& { Get-Process '{#StringChange(MyAppExeName, ".exe", "")}' -ErrorAction SilentlyContinue | Where-Object { $_.MainModule.FileName -eq '{app}\{#MyAppExeName}' } | Stop-Process -Force -ErrorAction SilentlyContinue }"""; Flags: runhidden; RunOnceId: KillApp
+; 卸载前强制关闭正在运行的程序
+Filename: "taskkill"; Parameters: "/F /IM kiraAI-DeskTop.exe"; Flags: runhidden; RunOnceId: KillApp
 
 ; ---------------------------------------------------------------------------
 ; [Code] — Pascal logic for path validation, data dir, and NSIS migration
