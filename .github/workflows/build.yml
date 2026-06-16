@@ -284,19 +284,83 @@ jobs:
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "App version: $APP_VERSION (from upstream $KIRAAI_REF)"
 
-      - name: Run electron-builder
+      - name: Run electron-builder (Windows)
+        if: runner.os == 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            # Windows: build unpacked app, then compile Inno Setup installer
-            npm run build:win:pack -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
-            iscc /dMyAppVersion="$APP_VERSION" build/setup.iss
-          else
-            npm run ${{ matrix.script }} -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
-          fi
+          npm run build:win:pack -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
+
+      - name: Debug Inno Setup files (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Output "=== Current directory ==="
+          Get-Location
+          Write-Output "=== build directory ==="
+          if (Test-Path build) {
+            Get-ChildItem build -Recurse | ForEach-Object { Write-Output $_.FullName }
+          } else {
+            Write-Output "build directory NOT FOUND"
+            Get-ChildItem -Recurse | Where-Object { $_.Name -like "*.iss" } | ForEach-Object { Write-Output "Found ISS: $($_.FullName)" }
+          }
+
+      - name: Build Inno Setup installer (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+        run: |
+          # 查找 ISCC
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            $found = Get-ChildItem "C:\Program Files*" -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $iscc = $found.FullName }
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe not found"
+          }
+
+          # 检查版本号
+          if ([string]::IsNullOrEmpty($env:APP_VERSION)) {
+            throw "APP_VERSION is not set"
+          }
+
+          # 使用绝对路径
+          $script = Join-Path $PWD "build\setup.iss"
+          if (-not (Test-Path $script)) {
+            throw "Setup script not found: $script"
+          }
+
+          Write-Output "ISCC: $iscc"
+          Write-Output "Script: $script"
+          Write-Output "Version: $env:APP_VERSION"
+
+          # 使用数组传递参数，避免解析问题
+          $compilerArgs = @(
+            "/dMyAppVersion=$env:APP_VERSION",
+            $script
+          )
+
+          Write-Output "Command: $iscc $compilerArgs"
+          & $iscc @compilerArgs
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "ISCC failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run electron-builder (macOS / Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run ${{ matrix.script }} -- ${{ matrix.extra }} --config.extraMetadata.version="$APP_VERSION"
 
       - name: List build output
         shell: bash
